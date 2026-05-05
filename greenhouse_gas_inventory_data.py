@@ -14,7 +14,8 @@ import matplotlib.pyplot as plt
 
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score, mean_squared_error
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
 from config import DATASET_PATH # From local file with the path to the dataset
 from config import PROJECT_PATH # From local file with the path to the project's folder
@@ -28,6 +29,47 @@ df = pd.read_csv(DATASET_PATH)
 # Configs for printing the data in the terminal
 pd.set_option("display.max_columns", None)
 pd.set_option("display.width", None)
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Functions
+# ----------------------------------------------------------------------------------------------------------------------------------
+
+def polynomial_tscv(pol_degree, X, y, nsplits):
+
+    r2_results = []
+    rmse_results = []
+    mae_results = []
+
+    X_centered = X - X.min() # Center years around 0 instead of 1000+ dates
+    X_set = PolynomialFeatures(pol_degree).fit_transform(X_centered) # Polynomial features
+
+    # Generate cross validation splits
+    tscv = TimeSeriesSplit(n_splits=nsplits)
+    splits = list(tscv.split(X_centered,y))
+    
+    for train_idx, test_idx in splits:
+        
+        # Slice training and test subsets
+        X_train, X_test = X_set[train_idx,:], X_set[test_idx,:]
+        y_train, y_test = y[train_idx], y[test_idx]
+
+        # Model train and predict
+        train = LinearRegression().fit(X_train, y_train)
+        prediction = train.predict(X_test)
+
+        # Compute error metrics
+        r2_results.append(r2_score(y_test, prediction)) # Compute and store R2
+        rmse_results.append(np.sqrt(mean_squared_error(y_test, prediction))) # Compute and store RMSE
+        mae_results.append(mean_absolute_error(y_test, prediction)) # Compute and store MAE
+
+    return {
+    "r2_mean": np.mean(r2_results),
+    "r2_std": np.std(r2_results),
+    "rmse_mean": np.mean(rmse_results),
+    "rmse_std": np.std(rmse_results),
+    "mae_mean": np.mean(mae_results),
+    "mae_std": np.std(mae_results)
+    }
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Dataset preprocessing
@@ -98,10 +140,10 @@ for country in np_countries:
     slopes_table.append(country_component_slopes)
 
 # Export slope table to a .csv
-pd.DataFrame(slopes_table).to_csv(PROJECT_PATH + "greenhouse_component_slopes_over_time.csv")
+pd.DataFrame(slopes_table).to_csv(PROJECT_PATH + "01_greenhouse_component_slopes_over_time.csv")
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-# Model data: linear and quadratic regression over the main greenhouse components to model existing data
+# Modeling historical data: linear and quadratic regression over the main greenhouse components to model existing data
 # ----------------------------------------------------------------------------------------------------------------------------------
 
 # Components to model: CO2, HFCs, CH4, N2O, PFCs, the others are too scarse in the dataset so as to model them.
@@ -156,15 +198,15 @@ for component in greenhouse_components_to_model:
         regression_metrics_table.append(country_regression_metrics)
 
 # Export linear and quadratic error metrics data to a .csv
-pd.DataFrame(regression_metrics_table).to_csv(PROJECT_PATH + "regression_metrics_table.csv")
+pd.DataFrame(regression_metrics_table).to_csv(PROJECT_PATH + "02_regression_metrics_table.csv")
 
 
 # ---------------------------------------------------------------------------
 # Small scale test for linear and quadratic regression: Denmark data
 
 # y = CO2 values, X = time (years in the dataset)
-y = df_denmark["CO2"].to_numpy().reshape(-1,1)
-X = df_denmark.index.to_numpy().reshape(-1,1)
+y = df_denmark["CO2"].to_numpy().reshape(-1,1) # Greenhouse gas component percentage
+X = df_denmark.index.to_numpy().reshape(-1,1) # Time (years)
 
 # Linear Model
 lin_model = LinearRegression().fit(X, y)
@@ -176,10 +218,51 @@ X_quad = poly2.fit_transform(X)
 quad_model = LinearRegression().fit(X_quad, y)
 y_quad = quad_model.predict(X_quad)
 
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Predicting future data: Predict the potential behavior of the main greenhouse gas components based on historical data
+# ----------------------------------------------------------------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Test 1: Polynomial Regression (Grades: 1, 2 and 3) on Denmark data
 # ---------------------------------------------------------------------------
 
+# Arrays for error metrics
+lin_r2 = []
+lin_rmse = []
+quad_r2 = []
+quad_rmse = []
+cube_r2 = []
+cube_rmse = []
 
+results = polynomial_tscv(1, X, y, 5)
+print("\n--------------------------------------------------")
+print("Linear Error Metrics:")
+print("--------------------------------------------------")
+print("R2 mean: " + str(results["r2_mean"]))
+print("R2 std.dev: " + str(results["r2_std"]))
+print("RMSE mean: " + str(results["rmse_mean"]))
+print("RMSE std.dev: " + str(results["rmse_std"]))
+print("MAE mean: " + str(results["mae_mean"]))
+print("MAE std.dev: " + str(results["mae_std"]))
 
-# ----------------------------------------------------------------------------------------------------------------------------------
-# Model data
-# ----------------------------------------------------------------------------------------------------------------------------------
+results = polynomial_tscv(2, X, y, 5)
+print("\n--------------------------------------------------")
+print("Quadratic Error Metrics:")
+print("--------------------------------------------------")
+print("R2 mean: " + str(results["r2_mean"]))
+print("R2 std.dev: " + str(results["r2_std"]))
+print("RMSE mean: " + str(results["rmse_mean"]))
+print("RMSE std.dev: " + str(results["rmse_std"]))
+print("MAE mean: " + str(results["mae_mean"]))
+print("MAE std.dev: " + str(results["mae_std"]))
+
+results = polynomial_tscv(3, X, y, 5)
+print("\n--------------------------------------------------")
+print("Cubic Error Metrics:")
+print("--------------------------------------------------")
+print("R2 mean: " + str(results["r2_mean"]))
+print("R2 std.dev: " + str(results["r2_std"]))
+print("RMSE mean: " + str(results["rmse_mean"]))
+print("RMSE std.dev: " + str(results["rmse_std"]))
+print("MAE mean: " + str(results["mae_mean"]))
+print("MAE std.dev: " + str(results["mae_std"]))
