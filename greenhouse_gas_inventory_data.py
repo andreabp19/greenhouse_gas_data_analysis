@@ -1,82 +1,39 @@
 
 # Author: Andrea Pineda
 # Date: 20 Apr. 2026
-# Summary: data science practice project
-# Subject: greenhouse gas dataset from the UN
+# Summary: Coursera data science project
+# Subject: greenhouse gas dataset from the UN (obtained from Kaggle)
 # Last modified: 4 May. 2026
 
-# ---------------------------------------------------------------------------
-# 1. Import libraries
-# ---------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Import libraries
+# ----------------------------------------------------------------------------------------------------------------------------------
 import pandas as pd
 import numpy as np
-import sklearn as sk
 import matplotlib.pyplot as plt
 
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_squared_error
 
-from config import DATASET_PATH
-from config import PROJECT_PATH
+from config import DATASET_PATH # From local file with the path to the dataset
+from config import PROJECT_PATH # From local file with the path to the project's folder
 
-# ---------------------------------------------------------------------------
-# 2. Import dataset
-# ---------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Import dataset
+# ----------------------------------------------------------------------------------------------------------------------------------
 
-# Fix this to get it from the website to avoid writing my directory.
 df = pd.read_csv(DATASET_PATH)
 
-# ---------------------------------------------------------------------------
-# 3. Define project objectives
-# ---------------------------------------------------------------------------
+# Configs for printing the data in the terminal
+pd.set_option("display.max_columns", None)
+pd.set_option("display.width", None)
 
-# --------------- 3.2 Summary of the content of the dataset ---------------
-# Type and amount of greenhouse emmission per country over a span of several years.
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Dataset preprocessing
+# ----------------------------------------------------------------------------------------------------------------------------------
 
-# 2.3 Potential objectives for the project
-# A. Relate type of emission per country based on the quantity of the emmission
-# B. Relate the amount of different types of emissions over several years per country
-# C. Identify the countries with the most emmissions of each emmission type
-# D. Predict how much emmissions will a country have based on its previous data
-
-# I like B and D. I will start with B.
-
-# For B:
-# The dataset contains 24 years of data for 40+ countries.
-# For each country, there is the total yearly amount of emmissions of 10 different greenhouse gas types.
-
-# Break down B further, for starting.
-# B.1. For each country, relate the amount of emmissions per type of emmission (how much of each there is when others are present).
-# B.2. For each year, identify the top emmissions generated per country
-# B.3. Track the behaviour of each emmission across all countries in the dataset over the 24-year span
-
-# Refined idea for B:
-# Big (what is it?): Percentage of each emission per country, per year
-# Medium (where/when is it?): Identify the trend of each emission type across the 24-year span, per country, then compare globally
-# Small (why it matters?): Compare the rates of change (increase/decrease) between the trends in the different types of emissions over time.
-
-# ---------------------------------------------------------------------------
-# 4. Clean data
-# ---------------------------------------------------------------------------
-
-# Duplicates
-df.drop_duplicates(keep="first", inplace=True) # Removes duplicates, keeping the first one, modifies the original df
-
-# Empty or NaN cells
-#print(df.isnull().sum()) # Checks if there are null values (either empty cells or NaN), in this case, there are no empty values.
-
-# ---------------------------------------------------------------------------
-# 5. EDA (Exploratory Data Analysis)
-# ---------------------------------------------------------------------------
-
-# 1. Big (what is it?): Plot the trend of each emission type across time, per country
-
-country_or_area = df["country_or_area"]
-year = df["year"]
-value = df["value"]
-category = df["category"]
-
+# Create shorter, easier to understand labels for greenhouse gas component names
 label_map = {
     "carbon_dioxide_co2_emissions_without_land_use_land_use_change_and_forestry_lulucf_in_kilotonne_co2_equivalent": "CO2",
     "hydrofluorocarbons_hfcs_emissions_in_kilotonne_co2_equivalent": "HFCs",
@@ -88,110 +45,124 @@ label_map = {
     "unspecified_mix_of_hydrofluorocarbons_hfcs_and_perfluorocarbons_pfcs_emissions_in_kilotonne_co2_equivalent": "HFCs/PFCs mix"
 }
 
-df_copy = df.copy()
-df_copy = df_copy.sort_values(by=["country_or_area", "year"])
-df_copy = df_copy[df_copy["category"].isin(label_map)]
-df_copy["total"] = df_copy.groupby("year")["value"].transform("sum")
-df_copy["percentage"] = df_copy["value"] / df_copy["total"] * 100
+# Make a cleaner copy of the dataset to work with
 
-# print(df_copy.groupby("year")["percentage"].sum()) # Sanity check, to see if all percentages summ 100
+df.drop_duplicates(keep="first", inplace=True) # Removes duplicates, keeping the first one, modifies the original df
 
+df_copy = df.copy() # Generate a copy of the dataset to avoid modifying the original (safety measure)
+df_copy = df_copy.sort_values(by=["country_or_area", "year"]) # Sort dataset by both country and year
+df_copy = df_copy[df_copy["category"].isin(label_map)] # Select relevant components based on label_map
+df_copy["total"] = df_copy.groupby("year")["value"].transform("sum") # Total greenhouse gas composition
+df_copy["percentage"] = df_copy["value"] / df_copy["total"] * 100 # Percentage per component
+
+# Pivot the copy of the dataset to turn the greenhouse components into columns instead of values
 df_copy_pivot = df_copy.pivot(index=["country_or_area","year"], columns="category", values="percentage")
-df_copy_pivot = df_copy_pivot.rename(columns=label_map)
-df_copy_pivot.fillna(0, inplace=True)
-#print(df_copy_pivot)
+df_copy_pivot = df_copy_pivot.rename(columns=label_map) # Replace label names with shorter versions
 
-# Get data from Scandinavian countries: Denmark, Sweden, Norway
+# Replace NaN values with 0
+df_copy_pivot.fillna(0, inplace=True) # Turn any NaN values to 0
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Exploratory Data Analysis (EDA): Slopes of the greenhouse components' behavior to see if they increase or decrease
+# ----------------------------------------------------------------------------------------------------------------------------------
+
+# Denmark data for small scale tests
 df_denmark = df_copy_pivot.loc["Denmark"]
-df_sweden = df_copy_pivot.loc["Sweden"]
-df_norway = df_copy_pivot.loc["Norway"]
 
-#fig, axes = plt.subplots(nrows=1, ncols=3)
+# Save the list of countries in the dataset to use as indices for iteration
+np_countries = df_copy["country_or_area"].drop_duplicates().to_numpy()
 
-# Plot Denmark Emission Percentages
-# df_denmark.plot(ax=axes[0], legend=False)
-# axes[0].set_title("Emission Composition Over Time, Denmark 1990-2014")
-# axes[0].set_yscale("log")
-# axes[0].set_xlabel("Year")
-# axes[0].set_ylabel("Percentage (%)")
+# Indices for the slopes table: country, CO2, NH3, etc.
+slopes_table_indices = ["Country"] + df_copy_pivot.columns.to_numpy().tolist()
 
-# Plot Sweden Emission Percentages
-# df_sweden.plot(ax=axes[1], legend=False)
-# axes[1].set_title("Emission Composition Over Time, Sweden 1990-2014")
-# axes[1].set_yscale("log")
-# axes[1].set_xlabel("Year")
-# axes[1].set_ylabel("Percentage (%)")
+# Create empty list for the slopes table and add the indices
+slopes_table = []
+slopes_table.append(slopes_table_indices)
 
-# Plot Norway Emission Percentages
-# df_norway.plot(ax=axes[2], legend=False)
-# axes[2].set_title("Emission Composition Over Time, Norway 1990-2014")
-# axes[2].set_yscale("log")
-# axes[2].set_xlabel("Year")
-# axes[2].set_ylabel("Percentage (%)")
+# Iterate over each country's data
+for country in np_countries:
+    
+    # Empty table for saving the slopes of each component per country
+    country_component_slopes = []
+    country_component_slopes.append(country) # Add name of the country to save it as part of the table to be generated
 
-# plt.legend(title="Emission Type", bbox_to_anchor=(0.5,1.165), loc="upper center", ncol=3)
-# plt.show()
+    # Retrieve data for the current country
+    df_country = df_copy_pivot.loc[country]
 
-# 2. Medium (where/when is it?): Compare the emission percentages between the selected countries
+    # Compute the slopes for each greenhouse gas component in the current country
+    for col in df_country.columns:
+        m, b = np.polyfit(df_country[col].index.to_numpy(), df_country[col].to_numpy(), 1) # Compute linear slope and intersect
+        country_component_slopes.append((m).round(4)) # Round the slop to 4 decimal values and save it
 
-pd.set_option("display.max_columns", None)
-pd.set_option("display.width", None)
+    # Save the current country's result as a row in the slopes table
+    slopes_table.append(country_component_slopes)
 
-denmark_describe = df_denmark.describe().T.round(3)
-norway_describe = df_norway.describe().T.round(3)
-sweden_describe = df_sweden.describe().T.round(3)
+# Export slope table to a .csv
+pd.DataFrame(slopes_table).to_csv(PROJECT_PATH + "greenhouse_component_slopes_over_time.csv")
 
-denmark_describe.to_csv(PROJECT_PATH + "describe_denmark.csv")
-norway_describe.to_csv(PROJECT_PATH + "describe_norway.csv")
-sweden_describe.to_csv(PROJECT_PATH + "describe_sweden.csv")
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Model data: linear and quadratic regression over the main greenhouse components to model existing data
+# ----------------------------------------------------------------------------------------------------------------------------------
 
-# 3. Small (why is it important?): CO2, N2O, CH4 and HFCs are the highest and HFCs increased over time.
-# It would be useful to track these across all countries and find more global patterns of these. 
-
-# Create numpy arrays from the dataframes for each country. First, just the scaninavian countries, then we'll generalize.
-# Elements in the array are the components' values
-
-# 3.1 Denmark composition increase slopes
-#print("\nDenmark:")
-denmark_slopes = []
-for col in df_denmark.columns:
-    m, b = np.polyfit(df_denmark[col].index.to_numpy(), df_denmark[col].to_numpy(), 1)
-    denmark_slopes.append((m).round(4))
-    #print(col + ":  " + str((m).round(4)))
-
-# 3.2 Norway composition increase slopes
-#print("\nNorway:")
-norway_slopes = []
-for col in df_norway.columns:
-    m, b = np.polyfit(df_norway[col].index.to_numpy(), df_norway[col].to_numpy(), 1)
-    norway_slopes.append((m).round(4))
-    #print(col + ":  " + str((m).round(4)))
-
-# 3.3 Sweden composition increase slopes
-#print("\nSweden:")
-sweden_slopes = []
-for col in df_sweden.columns:
-    m, b = np.polyfit(df_sweden[col].index.to_numpy(), df_sweden[col].to_numpy(), 1)
-    sweden_slopes.append((m).round(4))
-    #print(col + ":  " + str((m).round(4)))
-
-pd.DataFrame(denmark_slopes).to_csv(PROJECT_PATH + "slopes_denmark.csv")
-pd.DataFrame(norway_slopes).to_csv(PROJECT_PATH + "slopes_norway.csv")
-pd.DataFrame(sweden_slopes).to_csv(PROJECT_PATH + "slopes_sweden.csv")
-
-# ---------------------------------------------------------------------------
-# 4. Model data
-# ---------------------------------------------------------------------------
-
-# 4.1 Apply a linear or quadratic regression to the most relevant components in each country's data (historical modeling)
-
-# Generalize per component, for each country.
-# Generate a .csv with the linear and quadratic R2 and RMSE per greenhouse gas component for all countries.
-# Total: 5 .csv
 # Components to model: CO2, HFCs, CH4, N2O, PFCs, the others are too scarse in the dataset so as to model them.
 
-# Model the linear and quadratic regression of a single greenhouse component in a single country (small scale test)
+regression_metrics_table_indices = ["Country", "Linear R2", "Linear RMSE", "Quadratic R2", "Quadratic RMSE"]
+greenhouse_components_to_model = ["CO2", "HFCs", "CH4", "N2O", "PFCs"]
 
+regression_metrics_table = []
+
+# Select a component from the list of greenhouse gas components to model
+for component in greenhouse_components_to_model:
+
+    # Add a row with info of the current component
+    regression_metrics_table.append([])
+    regression_metrics_table.append([component])
+    regression_metrics_table.append(regression_metrics_table_indices)
+
+    # Select a country from which to model the data
+    for country in np_countries:
+
+        # Empty array to save the results for the current country
+        country_regression_metrics = [] 
+        country_regression_metrics.append(country)
+
+        # Retrieve data for the current country
+        df_country = df_copy_pivot.loc[country]
+
+        # y = CO2 values, X = time (years in the dataset)
+        y = df_country[component].to_numpy().reshape(-1, 1) # Reshape is necessary because it's 1D and the necessary functions expect a 2D array
+        X = df_country.index.to_numpy().reshape(-1, 1) # Same reshape to 2D
+
+        # Linear Regression Model
+        lin_model = LinearRegression().fit(X, y) # Generate linear regression model
+        y_lin = lin_model.predict(X) # Predict CO2 values based on the model
+
+        # Quadratic Regression Model
+        poly2 = PolynomialFeatures(degree=2) # Generate quadratic polynomial features
+        X_quad = poly2.fit_transform(X) # Fit quadratic features to the time data for use in the model
+
+        quad_model = LinearRegression().fit(X_quad, y) # Generate quadratic model based on Linear Regression
+        y_quad = quad_model.predict(X_quad) # Predict CO2 values based on the quadratic model
+
+        # Linear model error metrics: R2 and RMSE - Generate and save into the list for the current country
+        country_regression_metrics.append(r2_score(y, y_lin))
+        country_regression_metrics.append(np.sqrt(mean_squared_error(y, y_lin)))
+
+        # Quadratic model error metrics: R2 and RMSE - Generate and save into the list for the current country
+        country_regression_metrics.append(r2_score(y, y_quad))
+        country_regression_metrics.append(np.sqrt(mean_squared_error(y, y_quad)))
+
+        # Append data for the current country into the component table
+        regression_metrics_table.append(country_regression_metrics)
+
+# Export CO2 data to a .csv
+pd.DataFrame(regression_metrics_table).to_csv(PROJECT_PATH + "regression_metrics_table.csv")
+
+
+# ---------------------------------------------------------------------------
+# Small scale test for linear and quadratic regression: Denmark data
+
+# y = CO2 values, X = time (years in the dataset)
 y = df_denmark["CO2"].to_numpy().reshape(-1,1)
 X = df_denmark.index.to_numpy().reshape(-1,1)
 
@@ -199,31 +170,16 @@ X = df_denmark.index.to_numpy().reshape(-1,1)
 lin_model = LinearRegression().fit(X, y)
 y_lin = lin_model.predict(X)
 
-
 # Quadratic Model
-
 poly2 = PolynomialFeatures(degree=2)
 X_quad = poly2.fit_transform(X)
-
 quad_model = LinearRegression().fit(X_quad, y)
 y_quad = quad_model.predict(X_quad)
 
-# Plot regression results
+# ---------------------------------------------------------------------------
 
-plt.figure(figsize=(10,6))
 
-plt.plot(X, y, label="CO2 percentages")
-plt.plot(X, y_lin, label="Linear prediction")
-plt.plot(X, y_quad, label="Quadratic prediction")
-plt.title("Denmark CO2 with Linear and Quadratic Regression")
-plt.legend()
 
-plt.show()
-
-# Calculate error metrics: R2, mean square
-
-print("Linear R2: ", r2_score(y, y_lin))
-print("Quadratic R2: ", r2_score(y, y_quad))
-
-print("Linear RMSE: ", np.sqrt(mean_squared_error(y, y_lin)))
-print("Quadratic RMSE: ", np.sqrt(mean_squared_error(y, y_quad)))
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Model data
+# ----------------------------------------------------------------------------------------------------------------------------------
