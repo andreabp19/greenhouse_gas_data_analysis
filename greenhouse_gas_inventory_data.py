@@ -71,6 +71,17 @@ def polynomial_tscv(pol_degree, X, y, nsplits):
     "mae_std": np.std(mae_results)
     }
 
+def print_polynomial_tscv_results(text, results):
+    print("\n--------------------------------------------------")
+    print(text + " Error Metrics:")
+    print("--------------------------------------------------")
+    print("R2 mean: " + str(results["r2_mean"]))
+    print("R2 std.dev: " + str(results["r2_std"]))
+    print("RMSE mean: " + str(results["rmse_mean"]))
+    print("RMSE std.dev: " + str(results["rmse_std"]))
+    print("MAE mean: " + str(results["mae_mean"]))
+    print("MAE std.dev: " + str(results["mae_std"]))
+
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Dataset preprocessing
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -235,34 +246,10 @@ cube_r2 = []
 cube_rmse = []
 
 results = polynomial_tscv(1, X, y, 5)
-print("\n--------------------------------------------------")
-print("Linear Error Metrics:")
-print("--------------------------------------------------")
-print("R2 mean: " + str(results["r2_mean"]))
-print("R2 std.dev: " + str(results["r2_std"]))
-print("RMSE mean: " + str(results["rmse_mean"]))
-print("RMSE std.dev: " + str(results["rmse_std"]))
-print("MAE mean: " + str(results["mae_mean"]))
-print("MAE std.dev: " + str(results["mae_std"]))
+print_polynomial_tscv_results("Linear", results)
 
 results = polynomial_tscv(2, X, y, 5)
-print("\n--------------------------------------------------")
-print("Quadratic Error Metrics:")
-print("--------------------------------------------------")
-print("R2 mean: " + str(results["r2_mean"]))
-print("R2 std.dev: " + str(results["r2_std"]))
-print("RMSE mean: " + str(results["rmse_mean"]))
-print("RMSE std.dev: " + str(results["rmse_std"]))
-print("MAE mean: " + str(results["mae_mean"]))
-print("MAE std.dev: " + str(results["mae_std"]))
+print_polynomial_tscv_results("Quadratic", results)
 
 results = polynomial_tscv(3, X, y, 5)
-print("\n--------------------------------------------------")
-print("Cubic Error Metrics:")
-print("--------------------------------------------------")
-print("R2 mean: " + str(results["r2_mean"]))
-print("R2 std.dev: " + str(results["r2_std"]))
-print("RMSE mean: " + str(results["rmse_mean"]))
-print("RMSE std.dev: " + str(results["rmse_std"]))
-print("MAE mean: " + str(results["mae_mean"]))
-print("MAE std.dev: " + str(results["mae_std"]))
+print_polynomial_tscv_results("Cubic", results)
