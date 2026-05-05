@@ -155,7 +155,7 @@ for component in greenhouse_components_to_model:
         # Append data for the current country into the component table
         regression_metrics_table.append(country_regression_metrics)
 
-# Export CO2 data to a .csv
+# Export linear and quadratic error metrics data to a .csv
 pd.DataFrame(regression_metrics_table).to_csv(PROJECT_PATH + "regression_metrics_table.csv")
 
 
