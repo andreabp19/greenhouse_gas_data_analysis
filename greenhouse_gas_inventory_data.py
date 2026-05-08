@@ -13,7 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from sklearn.preprocessing import PolynomialFeatures
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
@@ -34,7 +34,7 @@ pd.set_option("display.width", None)
 # Functions
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-def polynomial_tscv(pol_degree, X, y, nsplits):
+def polynomial_tscv(pol_degree, X, y, nsplits, regression_type):
 
     r2_results = []
     rmse_results = []
@@ -45,7 +45,7 @@ def polynomial_tscv(pol_degree, X, y, nsplits):
 
     # Generate cross validation splits
     tscv = TimeSeriesSplit(n_splits=nsplits)
-    splits = list(tscv.split(X_centered,y))
+    splits = list(tscv.split(X_set,y))
     
     for train_idx, test_idx in splits:
         
@@ -54,8 +54,14 @@ def polynomial_tscv(pol_degree, X, y, nsplits):
         y_train, y_test = y[train_idx], y[test_idx]
 
         # Model train and predict
-        train = LinearRegression().fit(X_train, y_train)
-        prediction = train.predict(X_test)
+
+        if (regression_type=="polynomial"):
+            train = LinearRegression().fit(X_train, y_train)
+            prediction = train.predict(X_test)
+
+        elif (regression_type=="ridge"):
+            train = Ridge(alpha=0.0001).fit(X_train, y_train)
+            prediction = train.predict(X_test)
 
         # Compute error metrics
         r2_results.append(r2_score(y_test, prediction)) # Compute and store R2
@@ -63,6 +69,7 @@ def polynomial_tscv(pol_degree, X, y, nsplits):
         mae_results.append(mean_absolute_error(y_test, prediction)) # Compute and store MAE
 
     return {
+    "regression": regression_type+str(pol_degree),
     "r2_mean": np.mean(r2_results),
     "r2_std": np.std(r2_results),
     "rmse_mean": np.mean(rmse_results),
@@ -75,12 +82,34 @@ def print_polynomial_tscv_results(text, results):
     print("\n--------------------------------------------------")
     print(text + " Error Metrics:")
     print("--------------------------------------------------")
-    print("R2 mean: " + str(results["r2_mean"]))
-    print("R2 std.dev: " + str(results["r2_std"]))
-    print("RMSE mean: " + str(results["rmse_mean"]))
-    print("RMSE std.dev: " + str(results["rmse_std"]))
-    print("MAE mean: " + str(results["mae_mean"]))
-    print("MAE std.dev: " + str(results["mae_std"]))
+    print("Regression: " + results["regression"])
+    print("R2 mean: " + str(results["r2_mean"].round(3)))
+    print("R2 std.dev: " + str(results["r2_std"].round(3)))
+    print("RMSE mean: " + str(results["rmse_mean"].round(3)))
+    print("RMSE std.dev: " + str(results["rmse_std"].round(3)))
+    print("MAE mean: " + str(results["mae_mean"].round(3)))
+    print("MAE std.dev: " + str(results["mae_std"].round(3)))
+
+def print_best_fit(regression_metrics):
+
+    r2_means = {}
+    rmse_means = {}
+    
+    for regression in regression_metrics:
+        r2_means[regression["regression"]] = regression["r2_mean"]
+        rmse_means[regression["regression"]] = regression["rmse_mean"]
+
+    min_r2_means = max(r2_means.values())
+    min_rmse_means = min(rmse_means.values())
+
+    for key in r2_means.keys():
+        if min_r2_means == r2_means[key]:
+            best_r2 = ["R2", key, min_r2_means];
+
+        if min_rmse_means == rmse_means[key]:
+            best_rmse = ["RMSE", key, min_rmse_means]
+
+    return best_r2, best_rmse
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Dataset preprocessing
@@ -234,7 +263,7 @@ y_quad = quad_model.predict(X_quad)
 # ----------------------------------------------------------------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Test 1: Polynomial Regression (Grades: 1, 2 and 3) on Denmark data
+# Test 1: Polynomial Regression (Grades: 1-3) on Denmark CO2 data
 # ---------------------------------------------------------------------------
 
 # Arrays for error metrics
@@ -245,11 +274,26 @@ quad_rmse = []
 cube_r2 = []
 cube_rmse = []
 
-results = polynomial_tscv(1, X, y, 5)
-print_polynomial_tscv_results("Linear", results)
+pol1 = polynomial_tscv(1, X, y, 5, "polynomial")
+# print_polynomial_tscv_results("Polynomial Linear", pol1)
 
-results = polynomial_tscv(2, X, y, 5)
-print_polynomial_tscv_results("Quadratic", results)
+pol2 = polynomial_tscv(2, X, y, 5, "polynomial")
+# print_polynomial_tscv_results("Polynomial Quadratic", pol2)
 
-results = polynomial_tscv(3, X, y, 5)
-print_polynomial_tscv_results("Cubic", results)
+pol3 = polynomial_tscv(3, X, y, 5, "polynomial")
+# print_polynomial_tscv_results("Polynomial Cubic", pol3)
+
+ridge1 = polynomial_tscv(1, X, y, 5, "ridge")
+# print_polynomial_tscv_results("Ridge Linear", ridge1)
+
+ridge2 = polynomial_tscv(2, X, y, 5, "ridge")
+# print_polynomial_tscv_results("Ridge Quadratic", ridge2)
+
+ridge3 = polynomial_tscv(3, X, y, 5, "ridge")
+# print_polynomial_tscv_results("Ridge Cubic", ridge3)
+
+best_r2, best_rmse = print_best_fit([pol1, pol2, pol3, ridge1, ridge2, ridge3])
+denmark_prediction_results = [{"CO2": [best_r2, best_rmse]}]
+
+print("Denmark Prediction Results:")
+print(denmark_prediction_results)
