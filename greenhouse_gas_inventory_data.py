@@ -3,7 +3,7 @@
 # Date: 20 Apr. 2026
 # Summary: Coursera data science project
 # Subject: greenhouse gas dataset from the UN (obtained from Kaggle)
-# Last modified: 4 May. 2026
+# Last modified: 9 May. 2026
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Import libraries
@@ -79,7 +79,44 @@ def polynomial_tscv(pol_degree, X, y, nsplits, regression_type):
     "mae_std": np.std(mae_results)
     }
 
-def print_polynomial_tscv_results(text, results):
+def random_forest_regressor_tscv(X, y, nsplits):
+
+    r2_results = []
+    rmse_results = []
+    mae_results = []
+
+    X_centered = X - X.min() # Center years around 0 instead of 1000+ dates
+
+    # Generate cross validation splits
+    tscv = TimeSeriesSplit(n_splits=nsplits)
+    splits = list(tscv.split(X_centered,y))
+    
+    for train_idx, test_idx in splits:
+        
+        # Slice training and test subsets
+        X_train, X_test = X_centered[train_idx,:], X_centered[test_idx,:]
+        y_train, y_test = y[train_idx], y[test_idx]
+
+        # Model train and predict
+        train = RandomForestRegressor(max_depth=2, random_state=0).fit(X_train, y_train)
+        prediction = train.predict(X_test)
+
+        # Compute error metrics
+        r2_results.append(r2_score(y_test, prediction)) # Compute and store R2
+        rmse_results.append(np.sqrt(mean_squared_error(y_test, prediction))) # Compute and store RMSE
+        mae_results.append(mean_absolute_error(y_test, prediction)) # Compute and store MAE
+
+    return {
+    "regression": "RandomForestRegressor",
+    "r2_mean": np.mean(r2_results),
+    "r2_std": np.std(r2_results),
+    "rmse_mean": np.mean(rmse_results),
+    "rmse_std": np.std(rmse_results),
+    "mae_mean": np.mean(mae_results),
+    "mae_std": np.std(mae_results)
+    }    
+
+def print_tscv_results(text, results):
     print("\n--------------------------------------------------")
     print(text + " Error Metrics:")
     print("--------------------------------------------------")
@@ -111,6 +148,61 @@ def select_best_fit(regression_metrics):
             best_rmse = ["RMSE", key, min_rmse_means]
 
     return best_r2, best_rmse
+
+def model_greenhouse_components(greenhouse_components):
+
+    results_table = ["Country", "Linear R2", "Linear RMSE", "Quadratic R2", "Quadratic RMSE"]
+
+    regression_metrics_table = []
+
+    # Select a component from the list of greenhouse gas components to model
+    for component in greenhouse_components:
+
+        # Add a row with info of the current component
+        regression_metrics_table.append([])
+        regression_metrics_table.append([component])
+        regression_metrics_table.append(results_table)
+
+        # Select a country from which to model the data
+        for country in np_countries:
+
+            # Empty array to save the results for the current country
+            country_regression_metrics = [] 
+            country_regression_metrics.append(country)
+
+            # Retrieve data for the current country
+            df_country = df_copy_pivot.loc[country]
+
+            # y = CO2 values, X = time (years in the dataset)
+            y = df_country[component].to_numpy().reshape(-1, 1) # Reshape is necessary because it's 1D and the necessary functions expect a 2D array
+            X = df_country.index.to_numpy().reshape(-1, 1) # Same reshape to 2D
+
+            # Linear Regression Model
+            lin_model = LinearRegression().fit(X, y) # Generate linear regression model
+            y_lin = lin_model.predict(X) # Predict CO2 values based on the model
+
+            # Quadratic Regression Model
+            poly2 = PolynomialFeatures(degree=2) # Generate quadratic polynomial features
+            X_quad = poly2.fit_transform(X) # Fit quadratic features to the time data for use in the model
+
+            quad_model = LinearRegression().fit(X_quad, y) # Generate quadratic model based on Linear Regression
+            y_quad = quad_model.predict(X_quad) # Predict CO2 values based on the quadratic model
+
+            # Linear model error metrics: R2 and RMSE - Generate and save into the list for the current country
+            country_regression_metrics.append(r2_score(y, y_lin))
+            country_regression_metrics.append(np.sqrt(mean_squared_error(y, y_lin)))
+
+            # Quadratic model error metrics: R2 and RMSE - Generate and save into the list for the current country
+            country_regression_metrics.append(r2_score(y, y_quad))
+            country_regression_metrics.append(np.sqrt(mean_squared_error(y, y_quad)))
+
+            # Append data for the current country into the component table
+            regression_metrics_table.append(country_regression_metrics)
+
+    return regression_metrics_table
+
+
+
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Dataset preprocessing
@@ -187,66 +279,14 @@ pd.DataFrame(slopes_table).to_csv(PROJECT_PATH + "01_greenhouse_component_slopes
 # Modeling historical data: linear and quadratic regression over the main greenhouse components to model existing data
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-# Components to model: CO2, HFCs, CH4, N2O, PFCs, the others are too scarse in the dataset so as to model them.
+# Most relevant components based on their predominance among all countries in the dataset.
+greenhouse_components = ["CO2", "HFCs", "CH4", "N2O", "PFCs"]
 
-regression_metrics_table_indices = ["Country", "Linear R2", "Linear RMSE", "Quadratic R2", "Quadratic RMSE"]
-greenhouse_components_to_model = ["CO2", "HFCs", "CH4", "N2O", "PFCs"]
-
-regression_metrics_table = []
-
-# Select a component from the list of greenhouse gas components to model
-for component in greenhouse_components_to_model:
-
-    # Add a row with info of the current component
-    regression_metrics_table.append([])
-    regression_metrics_table.append([component])
-    regression_metrics_table.append(regression_metrics_table_indices)
-
-    # Select a country from which to model the data
-    for country in np_countries:
-
-        # Empty array to save the results for the current country
-        country_regression_metrics = [] 
-        country_regression_metrics.append(country)
-
-        # Retrieve data for the current country
-        df_country = df_copy_pivot.loc[country]
-
-        # y = CO2 values, X = time (years in the dataset)
-        y = df_country[component].to_numpy().reshape(-1, 1) # Reshape is necessary because it's 1D and the necessary functions expect a 2D array
-        X = df_country.index.to_numpy().reshape(-1, 1) # Same reshape to 2D
-
-        # Linear Regression Model
-        lin_model = LinearRegression().fit(X, y) # Generate linear regression model
-        y_lin = lin_model.predict(X) # Predict CO2 values based on the model
-
-        # Quadratic Regression Model
-        poly2 = PolynomialFeatures(degree=2) # Generate quadratic polynomial features
-        X_quad = poly2.fit_transform(X) # Fit quadratic features to the time data for use in the model
-
-        quad_model = LinearRegression().fit(X_quad, y) # Generate quadratic model based on Linear Regression
-        y_quad = quad_model.predict(X_quad) # Predict CO2 values based on the quadratic model
-
-        # Linear model error metrics: R2 and RMSE - Generate and save into the list for the current country
-        country_regression_metrics.append(r2_score(y, y_lin))
-        country_regression_metrics.append(np.sqrt(mean_squared_error(y, y_lin)))
-
-        # Quadratic model error metrics: R2 and RMSE - Generate and save into the list for the current country
-        country_regression_metrics.append(r2_score(y, y_quad))
-        country_regression_metrics.append(np.sqrt(mean_squared_error(y, y_quad)))
-
-        # Append data for the current country into the component table
-        regression_metrics_table.append(country_regression_metrics)
+# Model historical data of the relevant greenhouse gas components
+regression_metrics_table = model_greenhouse_components(greenhouse_components)
 
 # Export linear and quadratic error metrics data to a .csv
 pd.DataFrame(regression_metrics_table).to_csv(PROJECT_PATH + "02_regression_metrics_table.csv")
-
-
-# ---------------------------------------------------------------------------
-# Small scale test for linear and quadratic regression: Denmark data
-# y = CO2 values, X = time (years in the dataset)
-y = df_denmark["CO2"].to_numpy().reshape(-1,1) # Greenhouse gas component percentage
-X = df_denmark.index.to_numpy().reshape(-1,1) # Time (years)
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Predicting future data: Predict the potential behavior of the main greenhouse gas components based on historical data
@@ -267,7 +307,7 @@ for country in np_countries:
     df_country = df_copy_pivot.loc[country]
 
     # Predict data for each greenhouse gas component in the country
-    for component in greenhouse_components_to_model:
+    for component in greenhouse_components:
 
         # Retrieve data for the component
         X = df_country.index.to_numpy().reshape(-1,1) # Time (years)
@@ -295,3 +335,46 @@ print("Total cases: " + str(len(df_copy_pivot)))
 print("Cases with good model fit (0<R2<1): " + str(len(prediction_results_table)))
 print("Conclusion: Polynomial/ridge regressions are not adequate for this dataset")
 
+# ---------------------------------------------------------------------------
+# Test 2: Random Forest Regression and evaluate performance for prediction
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Small scale test: Denmark data
+# y = CO2 values, X = time (years in the dataset)
+y = df_denmark["CO2"].to_numpy() # Greenhouse gas component percentage
+X = df_denmark.index.to_numpy().reshape(-1,1) # Time (years)
+
+print("--------------------------------------------------")
+print("Random Forest Regressor Test Case:")
+print("--------------------------------------------------\n")
+
+rf_results = random_forest_regressor_tscv(X, y, 5)
+print_tscv_results("RandomForestRegressor", rf_results)
+
+for country in np_countries:
+
+    # Retrieve data for the current country
+    df_country = df_copy_pivot.loc[country]
+
+    # Predict data for each greenhouse gas component in the country
+    for component in greenhouse_components:
+
+        # Retrieve data for the component
+        X = df_country.index.to_numpy().reshape(-1,1) # Time (years)
+        y = df_country[component].to_numpy() # Greenhouse gas component percentage
+
+        cv_slices = 5
+        evaluations = []
+        # Perform regressions
+        evaluations.append(random_forest_regressor_tscv(X, y, cv_slices))
+
+        # Select the regression with the best performance (relative to the other regressions)
+        # This selection is based on which regression had the largest R2 and smallest RMSE
+        best_r2, best_rmse = select_best_fit(evaluations)
+        
+        # Save the cases where the regression is a good fit (exclude cases with negative R2 values)
+        if (best_r2[2] >= 0):
+            prediction_results_table.append([country, component, best_r2[1], best_r2[2].round(4), best_rmse[1], best_rmse[2].round(4)])
+
+pd.DataFrame(prediction_results_table).to_csv(PROJECT_PATH + "04_random_forest_prediction_results_table.csv")
