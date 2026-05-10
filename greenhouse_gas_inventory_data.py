@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.model_selection import TimeSeriesSplit
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
 from config import DATASET_PATH # From local file with the path to the dataset
@@ -90,7 +91,7 @@ def print_polynomial_tscv_results(text, results):
     print("MAE mean: " + str(results["mae_mean"].round(3)))
     print("MAE std.dev: " + str(results["mae_std"].round(3)))
 
-def print_best_fit(regression_metrics):
+def select_best_fit(regression_metrics):
 
     r2_means = {}
     rmse_means = {}
@@ -243,57 +244,54 @@ pd.DataFrame(regression_metrics_table).to_csv(PROJECT_PATH + "02_regression_metr
 
 # ---------------------------------------------------------------------------
 # Small scale test for linear and quadratic regression: Denmark data
-
 # y = CO2 values, X = time (years in the dataset)
 y = df_denmark["CO2"].to_numpy().reshape(-1,1) # Greenhouse gas component percentage
 X = df_denmark.index.to_numpy().reshape(-1,1) # Time (years)
-
-# Linear Model
-lin_model = LinearRegression().fit(X, y)
-y_lin = lin_model.predict(X)
-
-# Quadratic Model
-poly2 = PolynomialFeatures(degree=2)
-X_quad = poly2.fit_transform(X)
-quad_model = LinearRegression().fit(X_quad, y)
-y_quad = quad_model.predict(X_quad)
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Predicting future data: Predict the potential behavior of the main greenhouse gas components based on historical data
 # ----------------------------------------------------------------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Test 1: Polynomial Regression (Grades: 1-3) on Denmark CO2 data
+# Test 1: Polynomial and Ridge regressions, grade 1-3
 # ---------------------------------------------------------------------------
 
-# Arrays for error metrics
-lin_r2 = []
-lin_rmse = []
-quad_r2 = []
-quad_rmse = []
-cube_r2 = []
-cube_rmse = []
+prediction_results_table = [["Country", "Component", "Best R2 Regression", "Best R2 Value", "Best RMSE Regression", "Best RMSE Value"]]
 
-pol1 = polynomial_tscv(1, X, y, 5, "polynomial")
-# print_polynomial_tscv_results("Polynomial Linear", pol1)
+regressions = {"polynomial","ridge"}
+degrees = {1, 2, 3}
 
-pol2 = polynomial_tscv(2, X, y, 5, "polynomial")
-# print_polynomial_tscv_results("Polynomial Quadratic", pol2)
+for country in np_countries:
 
-pol3 = polynomial_tscv(3, X, y, 5, "polynomial")
-# print_polynomial_tscv_results("Polynomial Cubic", pol3)
+    # Retrieve data for the current country
+    df_country = df_copy_pivot.loc[country]
 
-ridge1 = polynomial_tscv(1, X, y, 5, "ridge")
-# print_polynomial_tscv_results("Ridge Linear", ridge1)
+    # Predict data for each greenhouse gas component in the country
+    for component in greenhouse_components_to_model:
 
-ridge2 = polynomial_tscv(2, X, y, 5, "ridge")
-# print_polynomial_tscv_results("Ridge Quadratic", ridge2)
+        # Retrieve data for the component
+        X = df_country.index.to_numpy().reshape(-1,1) # Time (years)
+        y = df_country[component].to_numpy().reshape(-1,1) # Greenhouse gas component percentage
 
-ridge3 = polynomial_tscv(3, X, y, 5, "ridge")
-# print_polynomial_tscv_results("Ridge Cubic", ridge3)
+        cv_slices = 4
+        evaluations = []
+        for regression in regressions:
+            for degree in degrees:
+                # Perform regressions
+                evaluations.append(polynomial_tscv(degree, X, y, cv_slices, regression))
 
-best_r2, best_rmse = print_best_fit([pol1, pol2, pol3, ridge1, ridge2, ridge3])
-denmark_prediction_results = [{"CO2": [best_r2, best_rmse]}]
+        # Select the regression with the best performance (relative to the other regressions)
+        # This selection is based on which regression had the largest R2 and smallest RMSE
+        best_r2, best_rmse = select_best_fit(evaluations)
+        
+        # Save the cases where the regression is a good fit (exclude cases with negative R2 values)
+        if (best_r2[2] >= 0):
+            prediction_results_table.append([country, component, best_r2[1], best_r2[2].round(4), best_rmse[1], best_rmse[2].round(4)])
 
-print("Denmark Prediction Results:")
-print(denmark_prediction_results)
+pd.DataFrame(prediction_results_table).to_csv(PROJECT_PATH + "03_prediction_results_table.csv")
+
+print("Summary of polynomial/ridge regressions:")
+print("Total cases: " + str(len(df_copy_pivot)))
+print("Cases with good model fit (0<R2<1): " + str(len(prediction_results_table)))
+print("Conclusion: Polynomial/ridge regressions are not adequate for this dataset")
+
