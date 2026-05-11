@@ -3,7 +3,8 @@
 # Date: 20 Apr. 2026
 # Summary: Coursera data science project
 # Subject: greenhouse gas dataset from the UN (obtained from Kaggle)
-# Last modified: 9 May. 2026
+# Dataset: https://www.kaggle.com/datasets/unitednations/international-greenhouse-gas-emissions/data
+# Last modified: 11 May. 2026
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Import libraries
@@ -18,6 +19,7 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
+# For using the code, make a config.py and save the dataset's and project's path in: DATASET_PATH, PROJECT_PATH
 from config import DATASET_PATH # From local file with the path to the dataset
 from config import PROJECT_PATH # From local file with the path to the project's folder
 
@@ -25,6 +27,7 @@ from config import PROJECT_PATH # From local file with the path to the project's
 # Import dataset
 # ----------------------------------------------------------------------------------------------------------------------------------
 
+# Read dataset from the .csv
 df = pd.read_csv(DATASET_PATH)
 
 # Configs for printing the data in the terminal
@@ -35,42 +38,68 @@ pd.set_option("display.width", None)
 # Functions
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-def polynomial_tscv(pol_degree, X, y, nsplits, regression_type):
+# Applies polynomial and ridge regressions to input data using time series cross-validation
+# pol_degree = Degree of the regression (applies for polynomial and ridge). Random forest doesn't use it (use any value for that one)
+# X: x-axis data (time)
+# y: y-axis data (in this case, greenhouse gas component data)
+# nsplits: number of splits on the dataset for the cross validation
+# array with the regression types to be implemented (polynomial, ridge or random forest)
+# Note: Currently, only applies for polynomial and ridge regressions, could be expanded for others.
+def apply_regression_tscv(pol_degree, X, y, nsplits, regression_type):
 
+    # Arrays for saving the error metric results
     r2_results = []
     rmse_results = []
     mae_results = []
 
     X_centered = X - X.min() # Center years around 0 instead of 1000+ dates
-    X_set = PolynomialFeatures(pol_degree).fit_transform(X_centered) # Polynomial features
-
-    # Generate cross validation splits
-    tscv = TimeSeriesSplit(n_splits=nsplits)
-    splits = list(tscv.split(X_set,y))
     
+    tscv = TimeSeriesSplit(n_splits=nsplits) # Generate time series split for cross validation
+
+    # 1. Generate cross validation subsets on X according to the type of regression
+    if (regression_type=="polynomial" or regression_type=="ridge"):
+        X_set = PolynomialFeatures(pol_degree).fit_transform(X_centered) # Generate polynomial features
+        splits = list(tscv.split(X_set,y)) # Generate splits with the polynomial data
+    
+    elif (regression_type=="random_forest"):
+        splits = list(tscv.split(X_centered,y)) # Generate splits with non polynomial features
+        X_set = X_centered # Save in X_set for easier code in the next part
+    
+    # 2. Apply the chosen regression with cross validation
     for train_idx, test_idx in splits:
         
-        # Slice training and test subsets
-        X_train, X_test = X_set[train_idx,:], X_set[test_idx,:]
+        # Slice X and y data for training and test subsets
         y_train, y_test = y[train_idx], y[test_idx]
+        X_train, X_test = X_set[train_idx,:], X_set[test_idx,:]
 
-        # Model train and predict
+        # Apply model training and prediction:
 
+        # 1. Polynomial regression
         if (regression_type=="polynomial"):
-            train = LinearRegression().fit(X_train, y_train)
-            prediction = train.predict(X_test)
+            train = LinearRegression().fit(X_train, y_train) # Train model
+            prediction = train.predict(X_test) # Predict data
+            regression_label = regression_type+str(pol_degree)
 
+        # 2. Ridge regression
         elif (regression_type=="ridge"):
-            train = Ridge(alpha=0.0001).fit(X_train, y_train)
-            prediction = train.predict(X_test)
+            train = Ridge(alpha=0.0001).fit(X_train, y_train) # Train model
+            prediction = train.predict(X_test) # Predict data
+            regression_label = regression_type+str(pol_degree)
 
-        # Compute error metrics
+        # 3. Random Forest regressor
+        elif (regression_type=="random_forest"):
+            train = RandomForestRegressor(max_depth=2, random_state=0).fit(X_train, y_train) # Train model
+            prediction = train.predict(X_test) # Predict data
+            regression_label = regression_type
+
+        # Compute error metrics: R2, RMSE, MAE
         r2_results.append(r2_score(y_test, prediction)) # Compute and store R2
         rmse_results.append(np.sqrt(mean_squared_error(y_test, prediction))) # Compute and store RMSE
         mae_results.append(mean_absolute_error(y_test, prediction)) # Compute and store MAE
 
+    # Return a dictionary with the error metrics for the applied regression
     return {
-    "regression": regression_type+str(pol_degree),
+    "regression": regression_label,
     "r2_mean": np.mean(r2_results),
     "r2_std": np.std(r2_results),
     "rmse_mean": np.mean(rmse_results),
@@ -78,43 +107,6 @@ def polynomial_tscv(pol_degree, X, y, nsplits, regression_type):
     "mae_mean": np.mean(mae_results),
     "mae_std": np.std(mae_results)
     }
-
-def random_forest_regressor_tscv(X, y, nsplits):
-
-    r2_results = []
-    rmse_results = []
-    mae_results = []
-
-    X_centered = X - X.min() # Center years around 0 instead of 1000+ dates
-
-    # Generate cross validation splits
-    tscv = TimeSeriesSplit(n_splits=nsplits)
-    splits = list(tscv.split(X_centered,y))
-    
-    for train_idx, test_idx in splits:
-        
-        # Slice training and test subsets
-        X_train, X_test = X_centered[train_idx,:], X_centered[test_idx,:]
-        y_train, y_test = y[train_idx], y[test_idx]
-
-        # Model train and predict
-        train = RandomForestRegressor(max_depth=2, random_state=0).fit(X_train, y_train)
-        prediction = train.predict(X_test)
-
-        # Compute error metrics
-        r2_results.append(r2_score(y_test, prediction)) # Compute and store R2
-        rmse_results.append(np.sqrt(mean_squared_error(y_test, prediction))) # Compute and store RMSE
-        mae_results.append(mean_absolute_error(y_test, prediction)) # Compute and store MAE
-
-    return {
-    "regression": "RandomForestRegressor",
-    "r2_mean": np.mean(r2_results),
-    "r2_std": np.std(r2_results),
-    "rmse_mean": np.mean(rmse_results),
-    "rmse_std": np.std(rmse_results),
-    "mae_mean": np.mean(mae_results),
-    "mae_std": np.std(mae_results)
-    }    
 
 def print_tscv_results(text, results):
     print("\n--------------------------------------------------")
@@ -293,12 +285,12 @@ pd.DataFrame(regression_metrics_table).to_csv(PROJECT_PATH + "02_regression_metr
 # ----------------------------------------------------------------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Test 1: Polynomial and Ridge regressions, grade 1-3
+# Test 1: Polynomial, Ridge and Random Forest regressions to predict data
 # ---------------------------------------------------------------------------
 
 prediction_results_table = [["Country", "Component", "Best R2 Regression", "Best R2 Value", "Best RMSE Regression", "Best RMSE Value"]]
 
-regressions = {"polynomial","ridge"}
+regressions = {"polynomial","ridge","random_forest"}
 degrees = {1, 2, 3}
 
 for country in np_countries:
@@ -311,14 +303,22 @@ for country in np_countries:
 
         # Retrieve data for the component
         X = df_country.index.to_numpy().reshape(-1,1) # Time (years)
-        y = df_country[component].to_numpy().reshape(-1,1) # Greenhouse gas component percentage
-
+        
         cv_slices = 4
         evaluations = []
+
         for regression in regressions:
-            for degree in degrees:
-                # Perform regressions
-                evaluations.append(polynomial_tscv(degree, X, y, cv_slices, regression))
+
+            if(regression=="polynomial" or regression=="ridge"):
+                y = df_country[component].to_numpy().reshape(-1,1) # Greenhouse gas component percentage
+
+                for degree in degrees:
+                    # Perform regressions
+                    evaluations.append(apply_regression_tscv(degree, X, y, cv_slices, regression))
+
+            elif(regression=="random_forest"):
+                y = df_country[component].to_numpy() # Greenhouse gas component percentage
+                evaluations.append(apply_regression_tscv(1, X, y, cv_slices, regression))
 
         # Select the regression with the best performance (relative to the other regressions)
         # This selection is based on which regression had the largest R2 and smallest RMSE
@@ -333,48 +333,3 @@ pd.DataFrame(prediction_results_table).to_csv(PROJECT_PATH + "03_prediction_resu
 print("Summary of polynomial/ridge regressions:")
 print("Total cases: " + str(len(df_copy_pivot)))
 print("Cases with good model fit (0<R2<1): " + str(len(prediction_results_table)))
-print("Conclusion: Polynomial/ridge regressions are not adequate for this dataset")
-
-# ---------------------------------------------------------------------------
-# Test 2: Random Forest Regression and evaluate performance for prediction
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# Small scale test: Denmark data
-# y = CO2 values, X = time (years in the dataset)
-y = df_denmark["CO2"].to_numpy() # Greenhouse gas component percentage
-X = df_denmark.index.to_numpy().reshape(-1,1) # Time (years)
-
-print("--------------------------------------------------")
-print("Random Forest Regressor Test Case:")
-print("--------------------------------------------------\n")
-
-rf_results = random_forest_regressor_tscv(X, y, 5)
-print_tscv_results("RandomForestRegressor", rf_results)
-
-for country in np_countries:
-
-    # Retrieve data for the current country
-    df_country = df_copy_pivot.loc[country]
-
-    # Predict data for each greenhouse gas component in the country
-    for component in greenhouse_components:
-
-        # Retrieve data for the component
-        X = df_country.index.to_numpy().reshape(-1,1) # Time (years)
-        y = df_country[component].to_numpy() # Greenhouse gas component percentage
-
-        cv_slices = 5
-        evaluations = []
-        # Perform regressions
-        evaluations.append(random_forest_regressor_tscv(X, y, cv_slices))
-
-        # Select the regression with the best performance (relative to the other regressions)
-        # This selection is based on which regression had the largest R2 and smallest RMSE
-        best_r2, best_rmse = select_best_fit(evaluations)
-        
-        # Save the cases where the regression is a good fit (exclude cases with negative R2 values)
-        if (best_r2[2] >= 0):
-            prediction_results_table.append([country, component, best_r2[1], best_r2[2].round(4), best_rmse[1], best_rmse[2].round(4)])
-
-pd.DataFrame(prediction_results_table).to_csv(PROJECT_PATH + "04_random_forest_prediction_results_table.csv")
