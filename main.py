@@ -19,66 +19,13 @@ from config import PROJECT_PATH # From local file with the path to the project's
 
 # Importing custom functions from functions.py
 from functions import regression_predict_tscv, print_tscv_results, select_best_fit, regression_model
+from preprocessing import df_workset, countries_in_dataset, components_in_dataset, components_to_predict
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-# Import dataset
+# Tables for saving results
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-# Read dataset from the .csv
-df = pd.read_csv(DATASET_PATH)
-
-# Configs for printing the data in the terminal
-pd.set_option("display.max_columns", None)
-pd.set_option("display.width", None)
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-# Dataset preprocessing
-# ----------------------------------------------------------------------------------------------------------------------------------
-
-# Create shorter, easier to understand labels for greenhouse gas component names
-label_map = {
-    "carbon_dioxide_co2_emissions_without_land_use_land_use_change_and_forestry_lulucf_in_kilotonne_co2_equivalent": "CO2",
-    "hydrofluorocarbons_hfcs_emissions_in_kilotonne_co2_equivalent": "HFCs",
-    "methane_ch4_emissions_without_land_use_land_use_change_and_forestry_lulucf_in_kilotonne_co2_equivalent": "CH4",
-    "nitrogen_trifluoride_nf3_emissions_in_kilotonne_co2_equivalent": "NF3",
-    "nitrous_oxide_n2o_emissions_without_land_use_land_use_change_and_forestry_lulucf_in_kilotonne_co2_equivalent": "N2O",
-    "perfluorocarbons_pfcs_emissions_in_kilotonne_co2_equivalent": "PFCs",
-    "sulphur_hexafluoride_sf6_emissions_in_kilotonne_co2_equivalent": "SF6",
-    "unspecified_mix_of_hydrofluorocarbons_hfcs_and_perfluorocarbons_pfcs_emissions_in_kilotonne_co2_equivalent": "HFCs/PFCs mix"
-}
-
-# Make a cleaner copy of the dataset to work with
-
-df.drop_duplicates(keep="first", inplace=True) # Removes duplicates, keeping the first one, modifies the original df
-
-df_copy = df.copy() # Generate a copy of the dataset to avoid modifying the original (safety measure)
-df_copy = df_copy.sort_values(by=["country_or_area", "year"]) # Sort dataset by both country and year
-df_copy = df_copy[df_copy["category"].isin(label_map)] # Select relevant components based on label_map
-df_copy["total"] = df_copy.groupby("year")["value"].transform("sum") # Total greenhouse gas composition
-df_copy["percentage"] = df_copy["value"] / df_copy["total"] * 100 # Percentage per component
-
-# Pivot the copy of the dataset to turn the greenhouse components into columns instead of values
-df_copy_pivot = df_copy.pivot(index=["country_or_area","year"], columns="category", values="percentage")
-df_copy_pivot = df_copy_pivot.rename(columns=label_map) # Replace label names with shorter versions
-
-# Replace NaN values with 0
-df_copy_pivot.fillna(0, inplace=True) # Turn any NaN values to 0
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-# Arrays for saving results or important data to be used later
-# ----------------------------------------------------------------------------------------------------------------------------------
-
-# 1. List of countries in the dataset: for iteration in modeling and prediction
-countries_in_dataset = df_copy["country_or_area"].drop_duplicates().to_numpy()
-
-# 2. Denmark data: small test case for trying new modeling before applying to all countries in the dataset
-df_denmark = df_copy_pivot.loc["Denmark"]
-
-# 3. List of greenhouse gas components in the dataset and subset to be used in prediction
-components_in_dataset = df_copy_pivot.columns.to_numpy().tolist()
-components_to_predict = ["CO2", "HFCs", "CH4", "N2O", "PFCs"]
-
-# 4. Trend slopes table: for saving and exporting the results of slope computation for increase/decrease of greenhouse components
+# Trend slopes table: for saving and exporting the results of slope computation for increase/decrease of greenhouse components
 slopes_table = []
 slopes_table.append(["Country"] + components_in_dataset) # Table column names
 
@@ -94,7 +41,7 @@ for country in countries_in_dataset:
     country_component_slopes.append(country) # Add name of the country to save it as part of the table to be generated
 
     # Retrieve data for the current country
-    df_country = df_copy_pivot.loc[country]
+    df_country = df_workset.loc[country]
 
     # Compute the slopes for each greenhouse gas component in the current country
     for col in df_country.columns:
@@ -108,7 +55,7 @@ for country in countries_in_dataset:
 # Modeling historical data: linear and quadratic regression over the main greenhouse components to model existing data
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-historical_modeling_table = regression_model(components_to_predict, countries_in_dataset, df_copy_pivot)
+historical_modeling_table = regression_model(components_to_predict, countries_in_dataset, df_workset)
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Predicting future data: Predict the potential behavior of the main greenhouse gas components based on historical data
@@ -124,7 +71,7 @@ degrees = {1, 2, 3}
 for country in countries_in_dataset:
 
     # Retrieve data for the current country
-    df_country = df_copy_pivot.loc[country]
+    df_country = df_workset.loc[country]
 
     # Predict data for each greenhouse gas component in the country
     for component in components_to_predict:

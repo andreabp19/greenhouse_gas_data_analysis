@@ -1,7 +1,7 @@
 
 # Author: Andrea Pineda
 # Date: 11 May. 2026
-# Summary: Custom functions used in greenhouse_gas_inventory_data.py
+# Summary: Custom functions used in main.py
 # Last modified: 11 May. 2026
 
 # ----------------------------------------------------------------------------------------------------------------------------------
