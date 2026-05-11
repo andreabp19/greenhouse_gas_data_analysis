@@ -46,7 +46,7 @@ for country in countries_in_dataset:
     # Compute the slopes for each greenhouse gas component in the current country
     for col in df_country.columns:
         m, b = np.polyfit(df_country[col].index.to_numpy(), df_country[col].to_numpy(), 1) # Compute linear slope and intersect
-        country_component_slopes.append((m).round(4)) # Round the slop to 4 decimal values and save it
+        country_component_slopes.append((m).round(4)) # Round the slope to 4 decimal values and save it
 
     # Save the current country's result as a row in the slopes table
     slopes_table.append(country_component_slopes)
@@ -65,8 +65,8 @@ historical_modeling_table = regression_model(components_to_predict, countries_in
 
 prediction_results_table = [["Country", "Component", "Best R2 Regression", "Best R2 Value", "Best RMSE Regression", "Best RMSE Value"]]
 
-regressions = {"polynomial","ridge","random_forest"}
-degrees = {1, 2, 3}
+regressions = ["polynomial","ridge","random_forest"]
+degrees = [1, 2, 3]
 
 for country in countries_in_dataset:
 
