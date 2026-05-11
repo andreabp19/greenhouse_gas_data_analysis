@@ -76,24 +76,17 @@ for country in countries_in_dataset:
     # Predict data for each greenhouse gas component in the country
     for component in components_to_predict:
 
-        # Retrieve data for the component
-        X = df_country.index.to_numpy().reshape(-1,1) # Time (years)
-        
         cv_slices = 4
         evaluations = []
 
         for regression in regressions:
 
             if(regression=="polynomial" or regression=="ridge"):
-                y = df_country[component].to_numpy().reshape(-1,1) # Greenhouse gas component percentage
-
-                for degree in degrees:
-                    # Perform regressions
-                    evaluations.append(regression_predict_tscv(degree, X, y, cv_slices, regression))
+                for degree in degrees: # Evaluate the polynomial or ridge regressions for degrees 1-3
+                    evaluations.append(regression_predict_tscv(degree, cv_slices, regression, df_country, component))
 
             elif(regression=="random_forest"):
-                y = df_country[component].to_numpy() # Greenhouse gas component percentage
-                evaluations.append(regression_predict_tscv(1, X, y, cv_slices, regression))
+                evaluations.append(regression_predict_tscv(1, cv_slices, regression, df_country, component))
 
         # Select the regression with the best performance (relative to the other regressions)
         # This selection is based on which regression had the largest R2 and smallest RMSE

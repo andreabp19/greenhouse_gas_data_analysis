@@ -18,8 +18,10 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-# Functions
+# Data Modeling Functions
 # ----------------------------------------------------------------------------------------------------------------------------------
+
+
 
 # Applies polynomial and ridge regressions to input data using time series cross-validation
 # pol_degree = Degree of the regression (applies for polynomial and ridge). Random forest doesn't use it (use any value for that one)
@@ -28,23 +30,26 @@ from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 # nsplits: number of splits on the dataset for the cross validation
 # array with the regression types to be implemented (polynomial, ridge or random forest)
 # Note: Currently, only applies for polynomial and ridge regressions, could be expanded for others.
-def regression_predict_tscv(pol_degree, X, y, nsplits, regression_type):
+def regression_predict_tscv(pol_degree, nsplits, regression_type, df, component):
 
     # Arrays for saving the error metric results
     r2_results = []
     rmse_results = []
     mae_results = []
 
+    X = df.index.to_numpy().reshape(-1,1) # Time (years)
     X_centered = X - X.min() # Center years around 0 instead of 1000+ dates
     
     tscv = TimeSeriesSplit(n_splits=nsplits) # Generate time series split for cross validation
 
     # 1. Generate cross validation subsets on X according to the type of regression
     if (regression_type=="polynomial" or regression_type=="ridge"):
+        y = df[component].to_numpy().reshape(-1,1) # Greenhouse gas component percentage
         X_set = PolynomialFeatures(pol_degree).fit_transform(X_centered) # Generate polynomial features
         splits = list(tscv.split(X_set,y)) # Generate splits with the polynomial data
     
     elif (regression_type=="random_forest"):
+        y = df[component].to_numpy() # Greenhouse gas component percentage
         splits = list(tscv.split(X_centered,y)) # Generate splits with non polynomial features
         X_set = X_centered # Save in X_set for easier code in the next part
     
@@ -91,18 +96,6 @@ def regression_predict_tscv(pol_degree, X, y, nsplits, regression_type):
     "mae_std": np.std(mae_results)
     }
 
-def print_tscv_results(text, results):
-    print("\n--------------------------------------------------")
-    print(text + " Error Metrics:")
-    print("--------------------------------------------------")
-    print("Regression: " + results["regression"])
-    print("R2 mean: " + str(results["r2_mean"].round(3)))
-    print("R2 std.dev: " + str(results["r2_std"].round(3)))
-    print("RMSE mean: " + str(results["rmse_mean"].round(3)))
-    print("RMSE std.dev: " + str(results["rmse_std"].round(3)))
-    print("MAE mean: " + str(results["mae_mean"].round(3)))
-    print("MAE std.dev: " + str(results["mae_std"].round(3)))
-
 def select_best_fit(regression_metrics):
 
     r2_means = {}
@@ -123,6 +116,8 @@ def select_best_fit(regression_metrics):
             best_rmse = ["RMSE", key, min_rmse_means]
 
     return best_r2, best_rmse
+
+
 
 def regression_model(components_to_predict, countries_in_dataset, df):
 
@@ -176,3 +171,18 @@ def regression_model(components_to_predict, countries_in_dataset, df):
 
     return historical_modeling_table
 
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Print functions
+# ----------------------------------------------------------------------------------------------------------------------------------
+
+def print_tscv_results(text, results):
+    print("\n--------------------------------------------------")
+    print(text + " Error Metrics:")
+    print("--------------------------------------------------")
+    print("Regression: " + results["regression"])
+    print("R2 mean: " + str(results["r2_mean"].round(3)))
+    print("R2 std.dev: " + str(results["r2_std"].round(3)))
+    print("RMSE mean: " + str(results["rmse_mean"].round(3)))
+    print("RMSE std.dev: " + str(results["rmse_std"].round(3)))
+    print("MAE mean: " + str(results["mae_mean"].round(3)))
+    print("MAE std.dev: " + str(results["mae_std"].round(3)))
