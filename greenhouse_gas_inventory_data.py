@@ -45,7 +45,7 @@ pd.set_option("display.width", None)
 # nsplits: number of splits on the dataset for the cross validation
 # array with the regression types to be implemented (polynomial, ridge or random forest)
 # Note: Currently, only applies for polynomial and ridge regressions, could be expanded for others.
-def apply_regression_tscv(pol_degree, X, y, nsplits, regression_type):
+def regression_predict_tscv(pol_degree, X, y, nsplits, regression_type):
 
     # Arrays for saving the error metric results
     r2_results = []
@@ -141,22 +141,22 @@ def select_best_fit(regression_metrics):
 
     return best_r2, best_rmse
 
-def model_greenhouse_components(greenhouse_components):
+def regression_model(components_to_predict):
 
     results_table = ["Country", "Linear R2", "Linear RMSE", "Quadratic R2", "Quadratic RMSE"]
 
-    regression_metrics_table = []
+    historical_modeling_table = []
 
     # Select a component from the list of greenhouse gas components to model
-    for component in greenhouse_components:
+    for component in components_to_predict:
 
         # Add a row with info of the current component
-        regression_metrics_table.append([])
-        regression_metrics_table.append([component])
-        regression_metrics_table.append(results_table)
+        historical_modeling_table.append([])
+        historical_modeling_table.append([component])
+        historical_modeling_table.append(results_table)
 
         # Select a country from which to model the data
-        for country in np_countries:
+        for country in countries_in_dataset:
 
             # Empty array to save the results for the current country
             country_regression_metrics = [] 
@@ -189,12 +189,9 @@ def model_greenhouse_components(greenhouse_components):
             country_regression_metrics.append(np.sqrt(mean_squared_error(y, y_quad)))
 
             # Append data for the current country into the component table
-            regression_metrics_table.append(country_regression_metrics)
+            historical_modeling_table.append(country_regression_metrics)
 
-    return regression_metrics_table
-
-
-
+    return historical_modeling_table
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Dataset preprocessing
@@ -230,24 +227,29 @@ df_copy_pivot = df_copy_pivot.rename(columns=label_map) # Replace label names wi
 df_copy_pivot.fillna(0, inplace=True) # Turn any NaN values to 0
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-# Exploratory Data Analysis (EDA): Slopes of the greenhouse components' behavior to see if they increase or decrease
+# Arrays for saving results or important data to be used later
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-# Denmark data for small scale tests
+# 1. List of countries in the dataset: for iteration in modeling and prediction
+countries_in_dataset = df_copy["country_or_area"].drop_duplicates().to_numpy()
+
+# 2. Denmark data: small test case for trying new modeling before applying to all countries in the dataset
 df_denmark = df_copy_pivot.loc["Denmark"]
 
-# Save the list of countries in the dataset to use as indices for iteration
-np_countries = df_copy["country_or_area"].drop_duplicates().to_numpy()
+# 3. List of greenhouse gas components in the dataset and subset to be used in prediction
+components_in_dataset = df_copy_pivot.columns.to_numpy().tolist()
+components_to_predict = ["CO2", "HFCs", "CH4", "N2O", "PFCs"]
 
-# Indices for the slopes table: country, CO2, NH3, etc.
-slopes_table_indices = ["Country"] + df_copy_pivot.columns.to_numpy().tolist()
-
-# Create empty list for the slopes table and add the indices
+# 4. Trend slopes table: for saving and exporting the results of slope computation for increase/decrease of greenhouse components
 slopes_table = []
-slopes_table.append(slopes_table_indices)
+slopes_table.append(["Country"] + components_in_dataset) # Table column names
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Exploratory Data Analysis (EDA): Slopes of the greenhouse components' behavior to see their increase or decrease over time
+# ----------------------------------------------------------------------------------------------------------------------------------
 
 # Iterate over each country's data
-for country in np_countries:
+for country in countries_in_dataset:
     
     # Empty table for saving the slopes of each component per country
     country_component_slopes = []
@@ -264,42 +266,30 @@ for country in np_countries:
     # Save the current country's result as a row in the slopes table
     slopes_table.append(country_component_slopes)
 
-# Export slope table to a .csv
-pd.DataFrame(slopes_table).to_csv(PROJECT_PATH + "01_greenhouse_component_slopes_over_time.csv")
-
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Modeling historical data: linear and quadratic regression over the main greenhouse components to model existing data
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-# Most relevant components based on their predominance among all countries in the dataset.
-greenhouse_components = ["CO2", "HFCs", "CH4", "N2O", "PFCs"]
-
-# Model historical data of the relevant greenhouse gas components
-regression_metrics_table = model_greenhouse_components(greenhouse_components)
-
-# Export linear and quadratic error metrics data to a .csv
-pd.DataFrame(regression_metrics_table).to_csv(PROJECT_PATH + "02_regression_metrics_table.csv")
+historical_modeling_table = regression_model(components_to_predict)
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Predicting future data: Predict the potential behavior of the main greenhouse gas components based on historical data
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Test 1: Polynomial, Ridge and Random Forest regressions to predict data
-# ---------------------------------------------------------------------------
+#--------------- Polynomial, Ridge and Random Forest Regression and error metrics --------------------------------------------------
 
 prediction_results_table = [["Country", "Component", "Best R2 Regression", "Best R2 Value", "Best RMSE Regression", "Best RMSE Value"]]
 
 regressions = {"polynomial","ridge","random_forest"}
 degrees = {1, 2, 3}
 
-for country in np_countries:
+for country in countries_in_dataset:
 
     # Retrieve data for the current country
     df_country = df_copy_pivot.loc[country]
 
     # Predict data for each greenhouse gas component in the country
-    for component in greenhouse_components:
+    for component in components_to_predict:
 
         # Retrieve data for the component
         X = df_country.index.to_numpy().reshape(-1,1) # Time (years)
@@ -314,11 +304,11 @@ for country in np_countries:
 
                 for degree in degrees:
                     # Perform regressions
-                    evaluations.append(apply_regression_tscv(degree, X, y, cv_slices, regression))
+                    evaluations.append(regression_predict_tscv(degree, X, y, cv_slices, regression))
 
             elif(regression=="random_forest"):
                 y = df_country[component].to_numpy() # Greenhouse gas component percentage
-                evaluations.append(apply_regression_tscv(1, X, y, cv_slices, regression))
+                evaluations.append(regression_predict_tscv(1, X, y, cv_slices, regression))
 
         # Select the regression with the best performance (relative to the other regressions)
         # This selection is based on which regression had the largest R2 and smallest RMSE
@@ -328,8 +318,16 @@ for country in np_countries:
         if (best_r2[2] >= 0):
             prediction_results_table.append([country, component, best_r2[1], best_r2[2].round(4), best_rmse[1], best_rmse[2].round(4)])
 
-pd.DataFrame(prediction_results_table).to_csv(PROJECT_PATH + "03_prediction_results_table.csv")
 
-print("Summary of polynomial/ridge regressions:")
-print("Total cases: " + str(len(df_copy_pivot)))
-print("Cases with good model fit (0<R2<1): " + str(len(prediction_results_table)))
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Export results to .csv files
+# ----------------------------------------------------------------------------------------------------------------------------------
+
+# Export slope results table
+pd.DataFrame(slopes_table).to_csv(PROJECT_PATH + "01_greenhouse_component_slopes_over_time.csv")
+
+# Export historical modeling error metrics table
+pd.DataFrame(historical_modeling_table).to_csv(PROJECT_PATH + "02_historical_modeling_table.csv")
+
+# Export prediction error metrics table
+pd.DataFrame(prediction_results_table).to_csv(PROJECT_PATH + "03_prediction_results_table.csv")
