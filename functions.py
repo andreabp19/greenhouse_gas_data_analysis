@@ -2,7 +2,7 @@
 # Author: Andrea Pineda
 # Date: 11 May. 2026
 # Summary: Custom functions used in main.py
-# Last modified: 11 May. 2026
+# Last modified: 13 May. 2026
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Import libraries
@@ -20,8 +20,6 @@ from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Data Modeling Functions
 # ----------------------------------------------------------------------------------------------------------------------------------
-
-
 
 # Applies polynomial and ridge regressions to input data using time series cross-validation
 # pol_degree = Degree of the regression (applies for polynomial and ridge). Random forest doesn't use it (use any value for that one)
@@ -117,59 +115,39 @@ def select_best_fit(regression_metrics):
 
     return best_r2, best_rmse
 
+def regression_model(pol_degree, regression_type, df, component):
 
+    # Retrieve X
+    X = df.index.to_numpy().reshape(-1,1) # Time (years)
+    X_centered = X - X.min() # Center years around 0 instead of 1000+ dates
 
-def regression_model(components_to_predict, countries_in_dataset, df):
+    # 1. Retrieve X and y from the df
+    if (regression_type=="polynomial" or regression_type=="ridge"):
+        y = df[component].to_numpy().reshape(-1,1) # Greenhouse gas component percentage
+        X_set = PolynomialFeatures(pol_degree).fit_transform(X_centered) # Generate polynomial features
 
-    results_table = ["Country", "Linear R2", "Linear RMSE", "Quadratic R2", "Quadratic RMSE"]
+    elif (regression_type=="random_forest"):
+        y = df[component].to_numpy() # Greenhouse gas component percentage
+        X_set = X_centered # Save in X_set for easier code in the next part
 
-    historical_modeling_table = []
+    # 2. Model historical data of the component
+    if(regression_type=="polynomial"):
+        fit = LinearRegression().fit(X_set, y) # Generate linear regression model
+        model = fit.predict(X_set) # Model compoment data
+        regression_label = regression_type+str(pol_degree)
 
-    # Select a component from the list of greenhouse gas components to model
-    for component in components_to_predict:
+    elif(regression_type=="ridge"):
+        fit = Ridge(alpha=0.01).fit(X_set, y) # Generate ridge regresion
+        model = fit.predict(X_set) # Model compoment data
+        regression_label = regression_type+str(pol_degree)
 
-        # Add a row with info of the current component
-        historical_modeling_table.append([])
-        historical_modeling_table.append([component])
-        historical_modeling_table.append(results_table)
+    elif(regression_type=="random_forest"):
+        fit = RandomForestRegressor(max_depth=2, random_state=0).fit(X_set, y) # Train model
+        model = fit.predict(X_set) # Model compoment data
+        regression_label = regression_type
 
-        # Select a country from which to model the data
-        for country in countries_in_dataset:
-
-            # Empty array to save the results for the current country
-            country_regression_metrics = [] 
-            country_regression_metrics.append(country)
-
-            # Retrieve data for the current country
-            df_country = df.loc[country]
-
-            # y = CO2 values, X = time (years in the dataset)
-            y = df_country[component].to_numpy().reshape(-1, 1) # Reshape is necessary because it's 1D and the necessary functions expect a 2D array
-            X = df_country.index.to_numpy().reshape(-1, 1) # Same reshape to 2D
-
-            # Linear Regression Model
-            lin_model = LinearRegression().fit(X, y) # Generate linear regression model
-            y_lin = lin_model.predict(X) # Predict CO2 values based on the model
-
-            # Quadratic Regression Model
-            poly2 = PolynomialFeatures(degree=2) # Generate quadratic polynomial features
-            X_quad = poly2.fit_transform(X) # Fit quadratic features to the time data for use in the model
-
-            quad_model = LinearRegression().fit(X_quad, y) # Generate quadratic model based on Linear Regression
-            y_quad = quad_model.predict(X_quad) # Predict CO2 values based on the quadratic model
-
-            # Linear model error metrics: R2 and RMSE - Generate and save into the list for the current country
-            country_regression_metrics.append(r2_score(y, y_lin))
-            country_regression_metrics.append(np.sqrt(mean_squared_error(y, y_lin)))
-
-            # Quadratic model error metrics: R2 and RMSE - Generate and save into the list for the current country
-            country_regression_metrics.append(r2_score(y, y_quad))
-            country_regression_metrics.append(np.sqrt(mean_squared_error(y, y_quad)))
-
-            # Append data for the current country into the component table
-            historical_modeling_table.append(country_regression_metrics)
-
-    return historical_modeling_table
+    # Return a list with the error metrics for the regression
+    return [regression_label, r2_score(y, model), np.sqrt(mean_squared_error(y, model))]
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Print functions
