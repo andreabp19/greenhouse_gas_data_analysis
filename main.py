@@ -64,7 +64,7 @@ print("- Finished slope computing")
 # ----------------------------------------------------------------------------------------------------------------------------------
 
 modeling_results_table = [
-    ["",        "",          "Pol1", "Pol1", "Pol2", "Pol2", "Pol3", "Pol3", "Ridge1", "Ridge1", "Ridge2", "Ridge2", "Ridge3", "Ridge3", "Random Forest"],
+    ["",        "",          "Pol1", "",   "Pol2", "",   "Pol3", "",   "Ridge1", "", "Ridge2", "", "Ridge3", "", "Random Forest"],
     ["Country", "Component", "R2", "RMSE", "R2", "RMSE", "R2", "RMSE", "R2", "RMSE", "R2", "RMSE", "R2", "RMSE", "R2", "RMSE"]]
 
 print("- Starting historical data modeling:")
