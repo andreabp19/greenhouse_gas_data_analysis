@@ -68,7 +68,7 @@ def regression_predict_tscv(pol_degree, nsplits, regression_type, df, component)
 
         # 2. Ridge regression
         elif (regression_type=="ridge"):
-            train = Ridge(alpha=0.0001).fit(X_train, y_train) # Train model
+            train = Ridge(alpha=0.001).fit(X_train, y_train) # Train model
             prediction = train.predict(X_test) # Predict data
             regression_label = regression_type+str(pol_degree)
 
@@ -94,12 +94,12 @@ def regression_predict_tscv(pol_degree, nsplits, regression_type, df, component)
     "mae_std": np.std(mae_results)
     }
 
-def select_best_fit(regression_metrics):
+def select_best_prediction_fit(prediction_metrics):
 
     r2_means = {}
     rmse_means = {}
     
-    for regression in regression_metrics:
+    for regression in prediction_metrics:
         r2_means[regression["regression"]] = regression["r2_mean"]
         rmse_means[regression["regression"]] = regression["rmse_mean"]
 
@@ -137,7 +137,7 @@ def regression_model(pol_degree, regression_type, df, component):
         regression_label = regression_type+str(pol_degree)
 
     elif(regression_type=="ridge"):
-        fit = Ridge(alpha=0.01).fit(X_set, y) # Generate ridge regresion
+        fit = Ridge(alpha=0.001).fit(X_set, y) # Generate ridge regresion
         model = fit.predict(X_set) # Model compoment data
         regression_label = regression_type+str(pol_degree)
 
@@ -148,6 +148,7 @@ def regression_model(pol_degree, regression_type, df, component):
 
     # Return a list with the error metrics for the regression
     return [regression_label, r2_score(y, model), np.sqrt(mean_squared_error(y, model))]
+
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Print functions
