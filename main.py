@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 from config import PROJECT_PATH # From local file with the path to the project's folder
 
 # Custom functions and variables in functions.py and preprocessing.py
-from functions import regression_predict_tscv, print_tscv_results, select_best_prediction_fit, apply_regressions
+from functions import select_best_prediction_fit, apply_regressions, apply_regressions_tscv
 from preprocessing import df_workset, countries_in_dataset, components_in_dataset, components_to_model
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -30,10 +30,26 @@ from preprocessing import df_workset, countries_in_dataset, components_in_datase
 slopes_table = []
 slopes_table.append(["Country"] + components_in_dataset) # Table column names
 
-# Regressions and degrees to be used for modeling and prediction
-regressions = ["polynomial","ridge","random_forest"]
-degrees = [1, 2, 3]
+# Regression configs
+regressions = ["polynomial","ridge","random_forest"] # Regressions to use
+degrees = [1, 2, 3] # Degrees for Polynomial and Ridge regressions
+cv_slices = 4 # Dataset slices for Time-Series Cross Validation
 
+# Table results (with their column names)
+modeling_raw_results = [
+    ["Country", "Component", "Pol1 R2", "Pol1 RMSE", "Pol2 R2",
+     "Pol2 RMSE", "Pol3 R2", "Pol3 RMSE", "Ridge1 R2", "Ridge1 RMSE",
+     "Ridge2 R2", "Ridge2 RMSE", "Ridge3 R2", "Ridge3 RMSE", "RandomForest R2", "RandomForest RMSE"]]
+
+prediction_raw_results = [
+    ["Country", "Component",
+     "Pol1 R2 Mean", "Pol1 R2 Stddev", "Pol1 RMSE Mean", "Pol1 RMSE Stddev",
+     "Pol2 R2 Mean", "Pol2 R2 Stddev", "Pol2 RMSE Mean", "Pol2 RMSE Stddev",
+     "Pol3 R2 Mean", "Pol3 R2 Stddev", "Pol3 RMSE Mean", "Pol3 RMSE Stddev",
+     "Ridge1 R2 Mean", "Ridge1 R2 Stddev", "Ridge1 RMSE Mean", "Ridge1 RMSE Stddev",
+     "Ridge2 R2 Mean", "Ridge2 R2 Stddev", "Ridge2 RMSE Mean", "Ridge2 RMSE Stddev",
+     "Ridge3 R2 Mean", "Ridge3 R2 Stddev", "Ridge3 RMSE Mean", "Ridge3 RMSE Stddev",
+     "RandomForest R2 Mean", "RandomForest R2 Stddev", "RandomForest RMSE Mean", "RandomForest RMSE Stddev"]]
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Exploratory Data Analysis (EDA): Slopes of the greenhouse components' behavior to see their increase or decrease over time
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -65,19 +81,12 @@ print("- Finished slope computing")
 # Modeling historical data: linear and quadratic regression over the main greenhouse components to model existing data
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-#--------------- Modeling with polynomial, Ridge and Random Forest Regression and error metrics ------------------------------------
-
-modeling_raw_results = [
-    ["Country", "Component", "Pol1 R2", "Pol1 RMSE", "Pol2 R2",
-     "Pol2 RMSE", "Pol3 R2", "Pol3 RMSE", "Ridge1 R2", "Ridge1 RMSE",
-     "Ridge2 R2", "Ridge2 RMSE", "Ridge3 R2", "Ridge3 RMSE", "RandomForest R2", "RandomForest RMSE"]]
+#--------------- Modeling: Polynomial, Ridge and Random Forest Regressions, with error metrics -------------------------------------
 
 print("- Starting raw historical data modeling:")
-metrics_dict = []
 for country in countries_in_dataset:
 
-    # Retrieve data for the current country
-    df_country = df_workset.loc[country]
+    df_country = df_workset.loc[country] # Retrieve data for the current country
 
     # Iterate the list of components to model
     for component in components_to_model:
@@ -114,38 +123,19 @@ print("- Finished summary of best fit per component:")
 
 #--------------- Polynomial, Ridge and Random Forest Regression and error metrics --------------------------------------------------
 
-prediction_results_table = [["Country", "Component", "Best R2 Regression", "Best R2 Value", "Best RMSE Regression", "Best RMSE Value"]]
-
 print("- Starting data prediction:")
 for country in countries_in_dataset:
 
-    # Retrieve data for the current country
-    df_country = df_workset.loc[country]
+    df_country = df_workset.loc[country] # Retrieve data for the current country
 
     # Predict data for each greenhouse gas component in the country
     for component in components_to_model:
 
-        cv_slices = 4
-        regression_metrics = []
-
-        for regression in regressions:
-
-            if(regression=="polynomial" or regression=="ridge"):
-                for degree in degrees: # Evaluate the polynomial or ridge regressions for degrees 1-3
-                    regression_metrics.append(regression_predict_tscv(degree, cv_slices, regression, df_country, component))
-
-            elif(regression=="random_forest"):
-                regression_metrics.append(regression_predict_tscv(1, cv_slices, regression, df_country, component))
-
-        # Select the regression with the best performance (relative to the other regressions)
-        # This selection is based on which regression had the largest R2 and smallest RMSE
-        best_r2, best_rmse = select_best_prediction_fit(regression_metrics)
-
+        regression_metrics = apply_regressions_tscv(regressions, degrees, cv_slices, df_country, component)
+        prediction_raw_results.append([country, component] + regression_metrics)
+        
         print("    - " + country + ", " + component) # Print for debugging
-
-        # Save the cases where the regression is a good fit (exclude cases with negative R2 values)
-        if (best_r2[2] >= 0):
-            prediction_results_table.append([country, component, best_r2[1], best_r2[2].round(4), best_rmse[1], best_rmse[2].round(4)])
+        
 
 print("- Finished data prediction")
 
@@ -204,4 +194,4 @@ pd.DataFrame(modeling_raw_results).to_csv(PROJECT_PATH + "02_modeling_raw_result
 df_best_fit_per_component.to_csv(PROJECT_PATH + "03_best_fit_per_component.csv")
 
 # Export prediction error metrics table
-pd.DataFrame(prediction_results_table).to_csv(PROJECT_PATH + "04_prediction_results_table.csv")
+pd.DataFrame(prediction_raw_results).to_csv(PROJECT_PATH + "04_prediction_raw_results.csv")

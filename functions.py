@@ -81,39 +81,9 @@ def regression_predict_tscv(pol_degree, nsplits, regression_type, df, component)
         # Compute error metrics: R2, RMSE, MAE
         r2_results.append(r2_score(y_test, prediction)) # Compute and store R2
         rmse_results.append(np.sqrt(mean_squared_error(y_test, prediction))) # Compute and store RMSE
-        mae_results.append(mean_absolute_error(y_test, prediction)) # Compute and store MAE
 
     # Return a dictionary with the error metrics for the applied regression
-    return {
-    "regression": regression_label,
-    "r2_mean": np.mean(r2_results),
-    "r2_std": np.std(r2_results),
-    "rmse_mean": np.mean(rmse_results),
-    "rmse_std": np.std(rmse_results),
-    "mae_mean": np.mean(mae_results),
-    "mae_std": np.std(mae_results)
-    }
-
-def select_best_prediction_fit(prediction_metrics):
-
-    r2_means = {}
-    rmse_means = {}
-    
-    for regression in prediction_metrics:
-        r2_means[regression["regression"]] = regression["r2_mean"]
-        rmse_means[regression["regression"]] = regression["rmse_mean"]
-
-    min_r2_means = max(r2_means.values())
-    min_rmse_means = min(rmse_means.values())
-
-    for key in r2_means.keys():
-        if min_r2_means == r2_means[key]:
-            best_r2 = ["R2", key, min_r2_means];
-
-        if min_rmse_means == rmse_means[key]:
-            best_rmse = ["RMSE", key, min_rmse_means]
-
-    return best_r2, best_rmse
+    return [regression_label, np.mean(r2_results), np.std(r2_results), np.mean(rmse_results), np.std(rmse_results)]
 
 def regression_model(pol_degree, regression_type, df, component):
 
@@ -169,6 +139,22 @@ def apply_regressions(regressions, degrees, df, component):
 
     return regression_metrics
 
+def apply_regressions_tscv(regressions, degrees, cv_slices, df, component):
+
+    regression_metrics = []
+
+    for regression in regressions:
+
+        if(regression=="polynomial" or regression=="ridge"):
+            for degree in degrees: # Evaluate the polynomial or ridge regressions for degrees 1-3
+                metrics = regression_predict_tscv(degree, cv_slices, regression, df, component)
+                regression_metrics.extend(np.round(metrics[1:5],4))
+
+        elif(regression=="random_forest"):
+            metrics = regression_predict_tscv(degree, cv_slices, regression, df, component)
+            regression_metrics.extend(np.round(metrics[1:5],4))
+
+    return regression_metrics
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Print functions
