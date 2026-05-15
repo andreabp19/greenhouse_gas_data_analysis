@@ -4,19 +4,21 @@
 # Summary: Coursera data science project
 # Subject: greenhouse gas dataset from the UN (obtained from Kaggle)
 # Dataset: https://www.kaggle.com/datasets/unitednations/international-greenhouse-gas-emissions/data
-# Last modified: 14 May. 2026
+# Last modified: 15 May. 2026
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-# Import libraries
+# Import libraries, functions and variables
 # ----------------------------------------------------------------------------------------------------------------------------------
+
+# Python Libraries
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-# For using the code, make a config.py and save the dataset's and project's path in: DATASET_PATH, PROJECT_PATH
+# Make a config.py and save the dataset's and project's path in: DATASET_PATH, PROJECT_PATH
 from config import PROJECT_PATH # From local file with the path to the project's folder
 
-# Importing custom functions from functions.py
+# Custom functions and variables in functions.py and preprocessing.py
 from functions import regression_predict_tscv, print_tscv_results, select_best_prediction_fit, regression_model
 from preprocessing import df_workset, countries_in_dataset, components_in_dataset, components_to_predict
 
@@ -64,7 +66,9 @@ print("- Finished slope computing")
 # ----------------------------------------------------------------------------------------------------------------------------------
 
 modeling_raw_results = [
-    ["Country", "Component", "Pol1 R2", "Pol1 RMSE", "Pol2 R2", "Pol2 RMSE", "Pol3 R2", "Pol3 RMSE", "Ridge1 R2", "Ridge1 RMSE", "Ridge2 R2", "Ridge2 RMSE", "Ridge3 R2", "Ridge3 RMSE", "RandomForest R2", "RandomForest RMSE"]]
+    ["Country", "Component", "Pol1 R2", "Pol1 RMSE", "Pol2 R2",
+     "Pol2 RMSE", "Pol3 R2", "Pol3 RMSE", "Ridge1 R2", "Ridge1 RMSE",
+     "Ridge2 R2", "Ridge2 RMSE", "Ridge3 R2", "Ridge3 RMSE", "RandomForest R2", "RandomForest RMSE"]]
 
 print("- Starting raw historical data modeling:")
 metrics_dict = []
@@ -92,7 +96,7 @@ for country in countries_in_dataset:
 
 print("- Finished raw historical data modeling")
 
-print("- Starting analysis for best historical fit per component:")
+print("- Creating summary of best fit per component:")
 
 df_historical = pd.DataFrame(modeling_raw_results) # Generate a datafram out of the regression results table
 df_historical.columns = df_historical.iloc[0] # Set the row with labels as column names
@@ -106,11 +110,9 @@ df_historical_r2 = df_historical_r2[~(df_historical_r2[df_historical_r2.columns[
 # Create new columns with the best fit data
 df_historical_r2["Best Fit"] = df_historical_r2.iloc[:, 2:].idxmax(axis=1) # Label of the best regression fit
 df_historical_r2["Best R2"] = df_historical_r2.iloc[:, 2:-1].max(axis=1) # R2 score of the best regression
-df_best_fit_per_component = df_historical_r2.groupby("Component")["Best Fit"].value_counts() # Count the best fits per greenhouse gas component
+df_best_fit_per_component = df_historical_r2.groupby("Component")["Best Fit"].value_counts() # Count best fits per component
 
-print(df_best_fit_per_component)
-
-print("- Finished analysis best historical fit per component:")
+print("- Finished summary of best fit per component:")
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Predicting future data: Predict the potential behavior of the main greenhouse gas components based on historical data
@@ -158,7 +160,41 @@ print("- Finished data prediction")
 # Plotting area (all plots generated here after data is processed)
 # ----------------------------------------------------------------------------------------------------------------------------------
 
+#--------------- Modeling best-fit regression summary for historical data modeling -------------------------------------------------
 
+print("\n\n\n")
+
+df_best_fit_per_component = pd.DataFrame(df_best_fit_per_component).reset_index() # Convert from Series to Dataframe
+df_best_fit_per_component["Best Fit"] = df_best_fit_per_component["Best Fit"].str.replace(r' R2', '', regex=True) # Remove " R2" from labels
+df_best_fit_per_component = df_best_fit_per_component.pivot(index="Component", columns="Best Fit", values="count").fillna(0)
+
+# Create plot
+colors = ["#B7D3C2", "#F7A9A8", "#B8C0FF"]
+ax = df_best_fit_per_component.plot(kind='bar', stacked=True, figsize=(12,8), color=colors)
+
+# Add values into each nonzero stacked bar
+for container in ax.containers:
+
+    labels = []
+
+    for bar in container:
+
+        height = bar.get_height()
+        if (height != 0):
+            labels.append(f"{int(height)}") # Save only the labels that aren't 0
+              
+        else:
+            labels.append("")    
+
+    ax.bar_label(container, labels=labels, label_type="center")
+        
+# Plot config
+plt.title("Number of best-fit cases per regression type for modeling the available greenhouse gas component data")
+plt.xlabel("Greenhouse Gas Component")
+plt.ylabel("Number of best fit cases per regression type")
+plt.show()
+
+print("\n\n\n")
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Export results to .csv files
