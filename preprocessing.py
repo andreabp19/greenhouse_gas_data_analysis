@@ -74,4 +74,4 @@ df_denmark = df_workset.loc["Denmark"]
 
 # 3. List of greenhouse gas components in the dataset and subset to be used in prediction
 components_in_dataset = df_workset.columns.to_numpy().tolist()
-components_to_predict = ["CO2", "HFCs", "CH4", "N2O", "PFCs"]
+components_to_model = ["CO2", "HFCs", "CH4", "N2O", "PFCs"]

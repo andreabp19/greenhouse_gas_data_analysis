@@ -19,8 +19,8 @@ import matplotlib.pyplot as plt
 from config import PROJECT_PATH # From local file with the path to the project's folder
 
 # Custom functions and variables in functions.py and preprocessing.py
-from functions import regression_predict_tscv, print_tscv_results, select_best_prediction_fit, regression_model
-from preprocessing import df_workset, countries_in_dataset, components_in_dataset, components_to_predict
+from functions import regression_predict_tscv, print_tscv_results, select_best_prediction_fit, apply_regressions
+from preprocessing import df_workset, countries_in_dataset, components_in_dataset, components_to_model
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Arrays for relevant data
@@ -65,6 +65,8 @@ print("- Finished slope computing")
 # Modeling historical data: linear and quadratic regression over the main greenhouse components to model existing data
 # ----------------------------------------------------------------------------------------------------------------------------------
 
+#--------------- Modeling with polynomial, Ridge and Random Forest Regression and error metrics ------------------------------------
+
 modeling_raw_results = [
     ["Country", "Component", "Pol1 R2", "Pol1 RMSE", "Pol2 R2",
      "Pol2 RMSE", "Pol3 R2", "Pol3 RMSE", "Ridge1 R2", "Ridge1 RMSE",
@@ -77,24 +79,16 @@ for country in countries_in_dataset:
     # Retrieve data for the current country
     df_country = df_workset.loc[country]
 
-    for component in components_to_predict:
-        regresion_modeling_results = []
-
-        for regression in regressions:
-            if(regression=="polynomial" or regression=="ridge"):
-                for degree in degrees: # Evaluate the polynomial or ridge regressions for degrees 1-3
-                    metrics = regression_model(degree, regression, df_country, component)
-                    regresion_modeling_results.extend(np.round(metrics[1:3],4))
-
-            elif(regression=="random_forest"):
-                metrics = regression_model(1, regression, df_country, component)
-                regresion_modeling_results.extend(np.round(metrics[1:3],4))
-
+    # Iterate the list of components to model
+    for component in components_to_model:
+        regression_metrics = apply_regressions(regressions, degrees, df_country, component)
+        modeling_raw_results.append([country, component] + regression_metrics)
+        
         print("    - " + country + ", " + component) # Print for debugging
 
-        modeling_raw_results.append([country, component] + regresion_modeling_results,)
-
 print("- Finished raw historical data modeling")
+
+#--------------- Selecting and counting best fit for modeling the greenhouse gas component data ------------------------------------
 
 print("- Creating summary of best fit per component:")
 
@@ -129,23 +123,23 @@ for country in countries_in_dataset:
     df_country = df_workset.loc[country]
 
     # Predict data for each greenhouse gas component in the country
-    for component in components_to_predict:
+    for component in components_to_model:
 
         cv_slices = 4
-        evaluations = []
+        regression_metrics = []
 
         for regression in regressions:
 
             if(regression=="polynomial" or regression=="ridge"):
                 for degree in degrees: # Evaluate the polynomial or ridge regressions for degrees 1-3
-                    evaluations.append(regression_predict_tscv(degree, cv_slices, regression, df_country, component))
+                    regression_metrics.append(regression_predict_tscv(degree, cv_slices, regression, df_country, component))
 
             elif(regression=="random_forest"):
-                evaluations.append(regression_predict_tscv(1, cv_slices, regression, df_country, component))
+                regression_metrics.append(regression_predict_tscv(1, cv_slices, regression, df_country, component))
 
         # Select the regression with the best performance (relative to the other regressions)
         # This selection is based on which regression had the largest R2 and smallest RMSE
-        best_r2, best_rmse = select_best_prediction_fit(evaluations)
+        best_r2, best_rmse = select_best_prediction_fit(regression_metrics)
 
         print("    - " + country + ", " + component) # Print for debugging
 

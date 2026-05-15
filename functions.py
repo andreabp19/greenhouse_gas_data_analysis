@@ -1,8 +1,8 @@
 
 # Author: Andrea Pineda
 # Date: 11 May. 2026
-# Summary: Custom functions used in main.py
-# Last modified: 13 May. 2026
+# Summary: Custom functions used in this project
+# Last modified: 15 May. 2026
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Import libraries
@@ -148,6 +148,26 @@ def regression_model(pol_degree, regression_type, df, component):
 
     # Return a list with the error metrics for the regression
     return [regression_label, r2_score(y, model), np.sqrt(mean_squared_error(y, model))]
+
+def apply_regressions(regressions, degrees, df, component):
+
+    regression_metrics = []
+
+    # Iterate the list of regressions to implement
+    for regression in regressions:
+
+        # Polynomial and Ridge regressions with degrees 1-3
+        if(regression=="polynomial" or regression=="ridge"):
+            for degree in degrees: # Evaluate the polynomial or ridge regressions for degrees 1-3
+                metrics = regression_model(degree, regression, df, component)
+                regression_metrics.extend(np.round(metrics[1:3],4))
+
+        # Random Forest regression
+        elif(regression=="random_forest"):
+            metrics = regression_model(1, regression, df, component)
+            regression_metrics.extend(np.round(metrics[1:3],4))
+
+    return regression_metrics
 
 
 # ----------------------------------------------------------------------------------------------------------------------------------
