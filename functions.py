@@ -2,7 +2,7 @@
 # Author: Andrea Pineda
 # Date: 11 May. 2026
 # Summary: Custom functions used in this project
-# Last modified: 15 May. 2026
+# Last modified: 16 May. 2026
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Import libraries
@@ -15,7 +15,7 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+from sklearn.metrics import r2_score, mean_squared_error
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Data Modeling Functions
@@ -31,8 +31,8 @@ from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 def regression_predict_tscv(pol_degree, nsplits, regression_type, df, component):
 
     # Arrays for saving the error metric results
-    r2_results = []
-    rmse_results = []
+    train_r2 = []
+    pred_r2 = []
     mae_results = []
 
     X = df.index.to_numpy().reshape(-1,1) # Time (years)
@@ -62,28 +62,31 @@ def regression_predict_tscv(pol_degree, nsplits, regression_type, df, component)
 
         # 1. Polynomial regression
         if (regression_type=="polynomial"):
-            train = LinearRegression().fit(X_train, y_train) # Train model
-            prediction = train.predict(X_test) # Predict data
+            fit = LinearRegression().fit(X_train, y_train) # Train model
+            train_pred = fit.predict(X_train) # Prediction with training data
+            test_pred = fit.predict(X_test) # Prediction with test data
             regression_label = regression_type+str(pol_degree)
 
         # 2. Ridge regression
         elif (regression_type=="ridge"):
-            train = Ridge(alpha=0.001).fit(X_train, y_train) # Train model
-            prediction = train.predict(X_test) # Predict data
+            fit = Ridge(alpha=0.001).fit(X_train, y_train) # Train model
+            train_pred = fit.predict(X_train) # Prediction with training data
+            test_pred = fit.predict(X_test) # Prediction with test data
             regression_label = regression_type+str(pol_degree)
 
         # 3. Random Forest regressor
         elif (regression_type=="random_forest"):
-            train = RandomForestRegressor(max_depth=2, random_state=0).fit(X_train, y_train) # Train model
-            prediction = train.predict(X_test) # Predict data
+            fit = RandomForestRegressor(max_depth=2, random_state=0).fit(X_train, y_train) # Train model
+            train_pred = fit.predict(X_train) # Prediction with training data
+            test_pred = fit.predict(X_test) # Prediction with test data
             regression_label = regression_type
 
-        # Compute error metrics: R2, RMSE, MAE
-        r2_results.append(r2_score(y_test, prediction)) # Compute and store R2
-        rmse_results.append(np.sqrt(mean_squared_error(y_test, prediction))) # Compute and store RMSE
+        # Compute R2 for training and prediction
+        train_r2.append(r2_score(y_train, train_pred)) # Training prediction R2 score
+        pred_r2.append(r2_score(y_test, test_pred)) # Test prediction R2 score
 
-    # Return a dictionary with the error metrics for the applied regression
-    return [regression_label, np.mean(r2_results), np.std(r2_results), np.mean(rmse_results), np.std(rmse_results)]
+    # Return a list with the regression name and the R2 scores for training and prediction
+    return [regression_label, np.mean(train_r2), np.mean(pred_r2)]
 
 def regression_model(pol_degree, regression_type, df, component):
 

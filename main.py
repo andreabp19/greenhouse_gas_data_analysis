@@ -4,7 +4,7 @@
 # Summary: Coursera data science project
 # Subject: greenhouse gas dataset from the UN (obtained from Kaggle)
 # Dataset: https://www.kaggle.com/datasets/unitednations/international-greenhouse-gas-emissions/data
-# Last modified: 15 May. 2026
+# Last modified: 16 May. 2026
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Import libraries, functions and variables
@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 from config import PROJECT_PATH # From local file with the path to the project's folder
 
 # Custom functions and variables in functions.py and preprocessing.py
-from functions import select_best_prediction_fit, apply_regressions, apply_regressions_tscv
+from functions import apply_regressions, apply_regressions_tscv
 from preprocessing import df_workset, countries_in_dataset, components_in_dataset, components_to_model
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -33,7 +33,7 @@ slopes_table.append(["Country"] + components_in_dataset) # Table column names
 # Regression configs
 regressions = ["polynomial","ridge","random_forest"] # Regressions to use
 degrees = [1, 2, 3] # Degrees for Polynomial and Ridge regressions
-cv_slices = 4 # Dataset slices for Time-Series Cross Validation
+cv_slices = 2 # Dataset slices for Time-Series Cross Validation
 
 # Table results (with their column names)
 modeling_raw_results = [
@@ -43,13 +43,13 @@ modeling_raw_results = [
 
 prediction_raw_results = [
     ["Country", "Component",
-     "Pol1 R2 Mean", "Pol1 R2 Stddev", "Pol1 RMSE Mean", "Pol1 RMSE Stddev",
-     "Pol2 R2 Mean", "Pol2 R2 Stddev", "Pol2 RMSE Mean", "Pol2 RMSE Stddev",
-     "Pol3 R2 Mean", "Pol3 R2 Stddev", "Pol3 RMSE Mean", "Pol3 RMSE Stddev",
-     "Ridge1 R2 Mean", "Ridge1 R2 Stddev", "Ridge1 RMSE Mean", "Ridge1 RMSE Stddev",
-     "Ridge2 R2 Mean", "Ridge2 R2 Stddev", "Ridge2 RMSE Mean", "Ridge2 RMSE Stddev",
-     "Ridge3 R2 Mean", "Ridge3 R2 Stddev", "Ridge3 RMSE Mean", "Ridge3 RMSE Stddev",
-     "RandomForest R2 Mean", "RandomForest R2 Stddev", "RandomForest RMSE Mean", "RandomForest RMSE Stddev"]]
+     "Polynomial1 Train R2", "Polynomial1 Pred R2",
+     "Polynomial2 Train R2", "Polynomial2 Pred R2",
+     "Polynomial3 Train R2", "Polynomial3 Pred R2",
+     "Ridge1 Train R2", "Ridge1 Pred R2",
+     "Ridge2 Train R2", "Ridge2 Pred R2",
+     "Ridge3 Train R2", "Ridge3 Pred R2",
+     "RandomForest Train R2", "RandomForest Pred R2"]]
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Exploratory Data Analysis (EDA): Slopes of the greenhouse components' behavior to see their increase or decrease over time
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -88,7 +88,7 @@ for country in countries_in_dataset:
 
     df_country = df_workset.loc[country] # Retrieve data for the current country
 
-    # Iterate the list of components to model
+    # Model the different components in the list with the chosen variations
     for component in components_to_model:
         regression_metrics = apply_regressions(regressions, degrees, df_country, component)
         modeling_raw_results.append([country, component] + regression_metrics)
@@ -105,15 +105,19 @@ df_historical = pd.DataFrame(modeling_raw_results) # Generate a datafram out of 
 df_historical.columns = df_historical.iloc[0] # Set the row with labels as column names
 df_historical = df_historical[1:].reset_index(drop=True) # Remove the row that has the would-be column labels
 
-df_historical_r2 = df_historical.drop(columns=df_historical.filter(regex=r"RMSE$").columns) # Save a copy without the RMSE columns
+df_historical_r2 = df_historical.drop(columns=df_historical.filter(regex=r"RMSE$").columns) # Save a copy with only the R2 results
 
 # Remove seemingly perfect scores (R2 = 1), as those are probably bugged and highly improbable (and could impact analysis)
 df_historical_r2 = df_historical_r2[~(df_historical_r2[df_historical_r2.columns[2:-2]] == 1.0).any(axis=1)]
 
-# Create new columns with the best fit data
+# Identify best regression fit and save it in new columns
 df_historical_r2["Best Fit"] = df_historical_r2.iloc[:, 2:].idxmax(axis=1) # Label of the best regression fit
 df_historical_r2["Best R2"] = df_historical_r2.iloc[:, 2:-1].max(axis=1) # R2 score of the best regression
-df_best_fit_per_component = df_historical_r2.groupby("Component")["Best Fit"].value_counts() # Count best fits per component
+
+df_best_modeling_fits = df_historical_r2.groupby("Component")["Best Fit"].value_counts() # Count best fits per component
+df_best_modeling_fits = pd.DataFrame(df_best_modeling_fits).reset_index() # Convert from Series to Dataframe
+df_best_modeling_fits["Best Fit"] = df_best_modeling_fits["Best Fit"].str.replace(r' R2', '', regex=True) # Remove " R2" from labels
+df_best_modeling_fits = df_best_modeling_fits.pivot(index="Component", columns="Best Fit", values="count").fillna(0)
 
 print("- Finished summary of best fit per component:")
 
@@ -121,24 +125,53 @@ print("- Finished summary of best fit per component:")
 # Predicting future data: Predict the potential behavior of the main greenhouse gas components based on historical data
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-#--------------- Polynomial, Ridge and Random Forest Regression and error metrics --------------------------------------------------
+#--------------- Prediction: Polynomial, Ridge and Random Forest Regressions with Time-Series Cross Validation ---------------------
 
 print("- Starting data prediction:")
 for country in countries_in_dataset:
 
     df_country = df_workset.loc[country] # Retrieve data for the current country
 
-    # Predict data for each greenhouse gas component in the country
+    # Predict the different components in the list with the chosen regressions
     for component in components_to_model:
-
         regression_metrics = apply_regressions_tscv(regressions, degrees, cv_slices, df_country, component)
         prediction_raw_results.append([country, component] + regression_metrics)
-        
+
         print("    - " + country + ", " + component) # Print for debugging
-        
 
 print("- Finished data prediction")
 
+#--------------- Prediction: Identify acceptable fit cases -------------------------------------------------------------------------
+
+df_prediction = pd.DataFrame(prediction_raw_results) # Generate DataFrame with the prediction error metrics table
+df_prediction.columns = df_prediction.iloc[0] # Set the row with labels as column names
+df_prediction = df_prediction[1:].reset_index(drop=True) # Remove the row that has the would-be column labels
+
+# Remove seemingly perfect scores (R2 = 1), as those are probably bugged and highly improbable (and could impact analysis)
+df_prediction = df_prediction[~(df_prediction[df_prediction.columns[2:]] == 1.0).any(axis=1)]
+
+# Identify best regression fit and save it in new columns
+df_prediction["Best Fit"] = df_prediction.iloc[:, 2:].idxmax(axis=1) # Label of the best regression fit
+df_prediction["Best R2"] = df_prediction.iloc[:, 2:-1].max(axis=1) # R2 score of the best regression
+
+df_best_prediction_fits = df_prediction.drop(columns=df_prediction.filter(regex=r"Train").columns) # Make a copy with the best fits
+
+print(df_best_prediction_fits)
+
+df_best_prediction_fits = pd.DataFrame(df_best_prediction_fits).reset_index(drop=True) # Convert from Series to Dataframe
+df_best_prediction_fits["Best Fit"] = df_best_prediction_fits["Best Fit"].str.replace(r' R2 Mean', '', regex=True) # Remove " R2" from labels
+#df_best_prediction_fits = df_best_prediction_fits.pivot(index="Component", columns="Best Fit", values="Best R2").fillna(0)
+
+# Remove all negative R2 and bad fits, defining 0.5 < R2 < 1 as an acceptable fit
+df_best_prediction_fits = df_best_prediction_fits[(df_best_prediction_fits["Best R2"] >= 0)]
+
+print(df_best_prediction_fits)
+
+df_best_prediction_fits.drop(columns="Country") # Remove Country column
+df_best_prediction_fits = df_best_prediction_fits.groupby("Component")["Best Fit"].value_counts().reset_index(name="count") # Count best fits per component
+df_best_prediction_fits = df_best_prediction_fits.pivot(index="Component", columns="Best Fit", values="count").fillna(0)
+
+print(df_best_prediction_fits)
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Plotting area (all plots generated here after data is processed)
@@ -146,15 +179,9 @@ print("- Finished data prediction")
 
 #--------------- Modeling best-fit regression summary for historical data modeling -------------------------------------------------
 
-print("\n\n\n")
-
-df_best_fit_per_component = pd.DataFrame(df_best_fit_per_component).reset_index() # Convert from Series to Dataframe
-df_best_fit_per_component["Best Fit"] = df_best_fit_per_component["Best Fit"].str.replace(r' R2', '', regex=True) # Remove " R2" from labels
-df_best_fit_per_component = df_best_fit_per_component.pivot(index="Component", columns="Best Fit", values="count").fillna(0)
-
 # Create plot
 colors = ["#B7D3C2", "#F7A9A8", "#B8C0FF"]
-ax = df_best_fit_per_component.plot(kind='bar', stacked=True, figsize=(12,8), color=colors)
+ax = df_best_modeling_fits.plot(kind='bar', stacked=True, figsize=(12,8), color=colors)
 
 # Add values into each nonzero stacked bar
 for container in ax.containers:
@@ -178,7 +205,33 @@ plt.xlabel("Greenhouse Gas Component")
 plt.ylabel("Number of best fit cases per regression type")
 plt.show()
 
-print("\n\n\n")
+#--------------- Prediction best-fit regression summary for historical data modeling -------------------------------------------------
+
+# Create plot
+colors = ["#B7D3C2", "#F7A9A8", "#B8C0FF"]
+ax = df_best_prediction_fits.plot(kind='bar', stacked=True, figsize=(12,8), color=colors)
+
+# Add values into each nonzero stacked bar
+for container in ax.containers:
+
+    labels = []
+
+    for bar in container:
+
+        height = bar.get_height()
+        if (height != 0):
+            labels.append(f"{int(height)}") # Save only the labels that aren't 0
+              
+        else:
+            labels.append("")    
+
+    ax.bar_label(container, labels=labels, label_type="center")
+        
+# Plot config
+plt.title("Number of best-fit cases per regression type for predicting the available greenhouse gas component data")
+plt.xlabel("Greenhouse Gas Component")
+plt.ylabel("Number of best fit cases per regression type")
+plt.show()
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Export results to .csv files
@@ -191,7 +244,7 @@ pd.DataFrame(slopes_table).to_csv(PROJECT_PATH + "01_greenhouse_component_slopes
 pd.DataFrame(modeling_raw_results).to_csv(PROJECT_PATH + "02_modeling_raw_results.csv")
 
 # Export the summary of best regression fits per greenhouse gas component
-df_best_fit_per_component.to_csv(PROJECT_PATH + "03_best_fit_per_component.csv")
+df_best_modeling_fits.to_csv(PROJECT_PATH + "03_best_fit_per_component.csv")
 
 # Export prediction error metrics table
 pd.DataFrame(prediction_raw_results).to_csv(PROJECT_PATH + "04_prediction_raw_results.csv")
