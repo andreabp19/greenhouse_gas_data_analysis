@@ -13,13 +13,13 @@
 # Python Libraries
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 
 # Make a config.py and save the dataset's and project's path in: DATASET_PATH, PROJECT_PATH
 from config import PROJECT_PATH # From local file with the path to the project's folder
 
 # Custom functions and variables in functions.py and preprocessing.py
 from functions import apply_regressions, apply_regressions_tscv, plot_regression_count
+from functions import df_from_raw, get_best_regression_fit
 from preprocessing import df_workset, countries_in_dataset, components_in_dataset, components_to_model
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -85,7 +85,7 @@ for country in countries_in_dataset:
 print("- Finished slope computing")
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-# Modeling historical data: linear and quadratic regression over the main greenhouse components to model existing data
+# Regression analysis: polynomial, ridge and random forest regressions for historical data modeling and future data prediction
 # ----------------------------------------------------------------------------------------------------------------------------------
 
 #--------------- Modeling: Polynomial, Ridge and Random Forest Regressions, with error metrics -------------------------------------
@@ -104,37 +104,6 @@ for country in countries_in_dataset:
 
 print("- Finished raw historical data modeling")
 
-#--------------- Selecting and counting best fit for modeling the greenhouse gas component data ------------------------------------
-
-print("- Creating summary of best fit per component:")
-
-df_historical = pd.DataFrame(modeling_raw_results) # Generate a datafram out of the regression results table
-df_historical.columns = df_historical.iloc[0] # Set the row with labels as column names
-df_historical = df_historical[1:].reset_index(drop=True) # Remove the row that has the would-be column labels
-
-df_historical_r2 = df_historical.drop(columns=df_historical.filter(regex=r"RMSE$").columns) # Save a copy with only the R2 results
-
-# Remove seemingly perfect scores (R2 = 1), as those are probably bugged and highly improbable (and could impact analysis)
-df_historical_r2 = df_historical_r2[~(df_historical_r2[df_historical_r2.columns[2:-2]] == 1.0).any(axis=1)]
-
-# Identify best regression fit and save it in new columns
-df_historical_r2["Best Fit"] = df_historical_r2.iloc[:, 2:].idxmax(axis=1) # Label of the best regression fit
-df_historical_r2["Best R2"] = df_historical_r2.iloc[:, 2:-1].max(axis=1) # R2 score of the best regression
-
-# Remove all values below the acceptable tolerance for R2 scores
-df_historical_r2 = df_historical_r2[(df_historical_r2["Best R2"] >= R2_TOLERANCE)]
-
-df_modeling = df_historical_r2.groupby("Component")["Best Fit"].value_counts() # Count best fits per component
-df_modeling = pd.DataFrame(df_modeling).reset_index() # Convert from Series to Dataframe
-df_modeling["Best Fit"] = df_modeling["Best Fit"].str.replace(r' R2', '', regex=True) # Remove " R2" from labels
-df_modeling = df_modeling.pivot(index="Component", columns="Best Fit", values="count").fillna(0)
-
-print("- Finished summary of best fit per component:")
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-# Predicting future data: Predict the potential behavior of the main greenhouse gas components based on historical data
-# ----------------------------------------------------------------------------------------------------------------------------------
-
 #--------------- Prediction: Polynomial, Ridge and Random Forest Regressions with Time-Series Cross Validation ---------------------
 
 print("- Starting data prediction:")
@@ -151,43 +120,61 @@ for country in countries_in_dataset:
 
 print("- Finished data prediction")
 
-#--------------- Prediction: Identify acceptable fit cases -------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Postprocesing: Counting best regression fit cases with each applied regression for modeling and prediction
+# ----------------------------------------------------------------------------------------------------------------------------------
 
-# Generate dataframe with the training and prediction results
-df_prediction = pd.DataFrame(prediction_raw_results) # Generate DataFrame with the prediction error metrics table
-df_prediction.columns = df_prediction.iloc[0] # Set the row with labels as column names
-df_prediction = df_prediction[1:].reset_index(drop=True) # Remove the row that has the would-be column labels
+print("- Creating summary of best fit per component:")
 
-# Remove seemingly perfect scores (R2 = 1), as those are probably bugged and highly improbable (and could impact analysis)
+# 1. Create dataframe from raw results
+df_historical = df_from_raw(modeling_raw_results)
+df_prediction = df_from_raw(prediction_raw_results)
+
+# 2. Remove unnecessary columns in the dataframe, keep only R2 score results
+df_modeling = df_historical.drop(columns=df_historical.filter(regex=r"RMSE$").columns) # Save a copy with only the R2 results
+
+# 3. Remove seemingly perfect scores (R2 = 1), as those are probably bugged and could impact interpretation
+df_modeling = df_modeling[~(df_modeling[df_modeling.columns[2:-2]] == 1.0).any(axis=1)]
 df_prediction = df_prediction[~(df_prediction[df_prediction.columns[2:]] == 1.0).any(axis=1)]
 
-# Separate into a different dataframe for training and prediction results
+# 4. Separate training and prediction dataframe results
 df_training = df_prediction.drop(columns=df_prediction.filter(regex=r"Pred").columns) # Make a copy with the training results
 df_prediction = df_prediction.drop(columns=df_prediction.filter(regex=r"Train").columns) # Make a copy with the prediction results
 
-# Identify best regression fit and save it in new columns
-df_training["Best Fit"] = df_training.iloc[:, 2:].idxmax(axis=1) # Label of the best regression fit
-df_training["Best R2"] = df_training.iloc[:, 2:-1].max(axis=1) # R2 score of the best regression
-df_prediction["Best Fit"] = df_prediction.iloc[:, 2:].idxmax(axis=1) # Label of the best regression fit
-df_prediction["Best R2"] = df_prediction.iloc[:, 2:-1].max(axis=1) # R2 score of the best regression
+# 5. Add new columns with best regression results: regression label, r2_score
+df_modeling = get_best_regression_fit(df_modeling)
+df_training = get_best_regression_fit(df_training)
+df_prediction = get_best_regression_fit(df_prediction)
 
-# Remove R2 labels to keep only the regression names
-df_training = pd.DataFrame(df_training).reset_index(drop=True) # Convert from Series to Dataframe
-df_training["Best Fit"] = df_training["Best Fit"].str.replace(r' R2 Mean', '', regex=True) # Remove " R2" from labels
-df_prediction = pd.DataFrame(df_prediction).reset_index(drop=True) # Convert from Series to Dataframe
-df_prediction["Best Fit"] = df_prediction["Best Fit"].str.replace(r' R2 Mean', '', regex=True) # Remove " R2" from labels
+# 6. Filter out every column except the best fit data, and remove extra characters from regression names
+df_modeling["Best Fit"] = df_modeling["Best Fit"].str.replace(r' R2', '', regex=True) # Remove " R2" from labels
+df_training["Best Fit"] = df_training["Best Fit"].str.replace(r' R2', '', regex=True) # Remove " R2" from labels
+df_prediction["Best Fit"] = df_prediction["Best Fit"].str.replace(r' R2', '', regex=True) # Remove " R2" from labels
 
-# Remove all values below the acceptable tolerance for R2 scores
+# 7. Filter out all results below the acceptable R2 score (0.6 <= R2 < 1)
+df_modeling = df_modeling[(df_modeling["Best R2"] >= R2_TOLERANCE)]
 df_training = df_training[(df_training["Best R2"] >= R2_TOLERANCE)]
 df_prediction = df_prediction[(df_prediction["Best R2"] >= R2_TOLERANCE)]
 
-# Remove country column and pivot the table to count the ocurrences of each regression per component
-df_training.drop(columns="Country") # Remove Country column
-df_training = df_training.groupby("Component")["Best Fit"].value_counts().reset_index(name="count") # Count best fits per component
+# 8. Remove "Country" column in training and prediction dataframes
+df_training.drop(columns="Country")
+df_prediction.drop(columns="Country")
+
+# 9. Organize data inside each dataframe and count total cases per regression in "Best Fit"
+df_modeling = df_modeling.groupby("Component")["Best Fit"].value_counts().reset_index() 
+df_training = df_training.groupby("Component")["Best Fit"].value_counts().reset_index(name="count") 
+df_prediction = df_prediction.groupby("Component")["Best Fit"].value_counts().reset_index(name="count")
+
+# 10. Pivot tables so regression labels are the columns and total count are the values in the cells (and replace NaNs with 0s)
+df_modeling = df_modeling.pivot(index="Component", columns="Best Fit", values="count").fillna(0)
 df_training = df_training.pivot(index="Component", columns="Best Fit", values="count").fillna(0)
-df_prediction.drop(columns="Country") # Remove Country column
-df_prediction = df_prediction.groupby("Component")["Best Fit"].value_counts().reset_index(name="count") # Count best fits per component
 df_prediction = df_prediction.pivot(index="Component", columns="Best Fit", values="count").fillna(0)
+
+print(df_modeling)
+print(df_training)
+print(df_prediction)
+
+print("- Finished summary of best fit per component:")
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Plotting area
@@ -201,16 +188,12 @@ plot_regression_count(colors, df_prediction, "Number of best-fit cases per regre
 # Export results to .csv files
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-# Export slope results table
+# Export raw result tables
 pd.DataFrame(slopes_table).to_csv(PROJECT_PATH + "01_greenhouse_component_slopes_over_time.csv")
-
-# Export historical modeling error metrics table
 pd.DataFrame(modeling_raw_results).to_csv(PROJECT_PATH + "02_modeling_raw_results.csv")
-
-# Export prediction error metrics table
 pd.DataFrame(prediction_raw_results).to_csv(PROJECT_PATH + "03_prediction_raw_results.csv")
 
-# Export the summary of best regression fits per greenhouse gas component
+# Export dataframes
 df_modeling.to_csv(PROJECT_PATH + "04_best_regression_fits_modeling.csv")
 df_training.to_csv(PROJECT_PATH + "05_best_regression_fits_training.csv")
 df_prediction.to_csv(PROJECT_PATH + "06_best_regression_fits_prediction.csv")

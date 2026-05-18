@@ -24,7 +24,7 @@ from sklearn.metrics import r2_score, mean_squared_error
 RIDGE_ALPHA = 0.1
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-# Data Modeling Functions
+# Data Modeling and Prediction Functions
 # ----------------------------------------------------------------------------------------------------------------------------------
 
 # Applies polynomial and ridge regressions to input data using time series cross-validation
@@ -164,6 +164,24 @@ def apply_regressions_tscv(regressions, degrees, cv_slices, df, component):
             regression_metrics.extend(np.round(metrics[1:5],4))
 
     return regression_metrics
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Data Postprocessing Functions
+# ----------------------------------------------------------------------------------------------------------------------------------
+
+def df_from_raw(raw_results):
+    new_df = pd.DataFrame(raw_results) # Generate DataFrame with the results table [[...], [...], ...]
+    new_df.columns = new_df.iloc[0] # Set the row with labels as column names
+    new_df = new_df[1:].reset_index(drop=True) # Remove the row that has the number-filled column labels
+    
+    return new_df
+
+def get_best_regression_fit(df):
+    df["Best Fit"] = df.iloc[:, 2:].idxmax(axis=1) # Label of the best regression fit
+    df["Best R2"] = df.iloc[:, 2:-1].max(axis=1) # R2 score of the best regression (returns a Series)
+    df = pd.DataFrame(df).reset_index(drop=True) # Convert from Series to Dataframe
+    
+    return df
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Print functions
