@@ -2,7 +2,7 @@
 # Author: Andrea Pineda
 # Date: 11 May. 2026
 # Summary: Custom functions used in this project
-# Last modified: 16 May. 2026
+# Last modified: 18 May. 2026
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Import libraries
@@ -16,6 +16,12 @@ from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score, mean_squared_error
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Constants
+# ----------------------------------------------------------------------------------------------------------------------------------
+
+RIDGE_ALPHA = 0.1
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Data Modeling Functions
@@ -69,7 +75,7 @@ def regression_predict_tscv(pol_degree, nsplits, regression_type, df, component)
 
         # 2. Ridge regression
         elif (regression_type=="ridge"):
-            fit = Ridge(alpha=0.001).fit(X_train, y_train) # Train model
+            fit = Ridge(alpha=RIDGE_ALPHA).fit(X_train, y_train) # Train model
             train_pred = fit.predict(X_train) # Prediction with training data
             test_pred = fit.predict(X_test) # Prediction with test data
             regression_label = regression_type+str(pol_degree)
@@ -110,7 +116,7 @@ def regression_model(pol_degree, regression_type, df, component):
         regression_label = regression_type+str(pol_degree)
 
     elif(regression_type=="ridge"):
-        fit = Ridge(alpha=0.001).fit(X_set, y) # Generate ridge regresion
+        fit = Ridge(alpha=RIDGE_ALPHA).fit(X_set, y) # Generate ridge regresion
         model = fit.predict(X_set) # Model compoment data
         regression_label = regression_type+str(pol_degree)
 
