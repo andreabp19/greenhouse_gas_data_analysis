@@ -180,3 +180,33 @@ def print_tscv_results(text, results):
     print("RMSE std.dev: " + str(results["rmse_std"].round(3)))
     print("MAE mean: " + str(results["mae_mean"].round(3)))
     print("MAE std.dev: " + str(results["mae_std"].round(3)))
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Plot functions
+# ----------------------------------------------------------------------------------------------------------------------------------
+
+def plot_regression_count(colors, df, title):
+    
+    ax = df.plot(kind='bar', stacked=True, figsize=(12,8), color=colors)
+
+    # Add values into each nonzero stacked bar
+    for container in ax.containers:
+
+        labels = []
+
+        for bar in container:
+
+            height = bar.get_height()
+            if (height != 0):
+                labels.append(f"{int(height)}") # Save only the labels that aren't 0
+                
+            else:
+                labels.append("")    
+
+        ax.bar_label(container, labels=labels, label_type="center")
+            
+    # Plot config
+    plt.title(title)
+    plt.xlabel("Greenhouse Gas Component")
+    plt.ylabel("Number of best fit cases with each regression type")
+    plt.show()
