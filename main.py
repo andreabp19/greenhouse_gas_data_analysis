@@ -43,9 +43,7 @@ cv_slices = 2 # Dataset slices for Time-Series Cross Validation
 
 # Table results (with their column names)
 modeling_raw_results = [
-    ["Country", "Component", "Pol1 R2", "Pol1 RMSE", "Pol2 R2",
-     "Pol2 RMSE", "Pol3 R2", "Pol3 RMSE", "Ridge1 R2", "Ridge1 RMSE",
-     "Ridge2 R2", "Ridge2 RMSE", "Ridge3 R2", "Ridge3 RMSE", "RandomForest R2", "RandomForest RMSE"]]
+    ["Country", "Component", "Pol1 R2", "Pol2 R2", "Pol3 R2", "Ridge1 R2", "Ridge2 R2", "Ridge3 R2", "RandomForest R2"]]
 
 prediction_raw_results = [
     ["Country", "Component",
@@ -127,45 +125,38 @@ print("- Finished data prediction")
 print("- Creating summary of best fit per component:")
 
 # 1. Create dataframe from raw results
-df_historical = df_from_raw(modeling_raw_results)
+df_modeling = df_from_raw(modeling_raw_results)
 df_prediction = df_from_raw(prediction_raw_results)
 
-# 2. Remove unnecessary columns in the dataframe, keep only R2 score results
-df_modeling = df_historical.drop(columns=df_historical.filter(regex=r"RMSE$").columns) # Save a copy with only the R2 results
-
-# 3. Remove seemingly perfect scores (R2 = 1), as those are probably bugged and could impact interpretation
+# 2. Remove seemingly perfect scores (R2 = 1), as those are probably bugged and could impact interpretation
 df_modeling = df_modeling[~(df_modeling[df_modeling.columns[2:-2]] == 1.0).any(axis=1)]
 df_prediction = df_prediction[~(df_prediction[df_prediction.columns[2:]] == 1.0).any(axis=1)]
 
-# 4. Separate training and prediction dataframe results
+# 3. Separate training and prediction dataframe results
 df_training = df_prediction.drop(columns=df_prediction.filter(regex=r"Pred").columns) # Make a copy with the training results
 df_prediction = df_prediction.drop(columns=df_prediction.filter(regex=r"Train").columns) # Make a copy with the prediction results
 
-# 5. Add new columns with best regression results: regression label, r2_score
+# 4. Add new columns with best regression results: regression label, r2_score
 df_modeling = get_best_regression_fit(df_modeling)
 df_training = get_best_regression_fit(df_training)
 df_prediction = get_best_regression_fit(df_prediction)
 
-# 6. Filter out every column except the best fit data, and remove extra characters from regression names
+# 5. Filter out every column except the best fit data, and remove extra characters from regression names
 df_modeling["Best Fit"] = df_modeling["Best Fit"].str.replace(r' R2', '', regex=True) # Remove " R2" from labels
-df_training["Best Fit"] = df_training["Best Fit"].str.replace(r' R2', '', regex=True) # Remove " R2" from labels
-df_prediction["Best Fit"] = df_prediction["Best Fit"].str.replace(r' R2', '', regex=True) # Remove " R2" from labels
+df_training["Best Fit"] = df_training["Best Fit"].str.replace(r'Train R2', '', regex=True) # Remove " R2" from labels
+df_prediction["Best Fit"] = df_prediction["Best Fit"].str.replace(r'Pred R2', '', regex=True) # Remove " R2" from labels
 
-# 7. Filter out all results below the acceptable R2 score (0.6 <= R2 < 1)
+# 6. Filter out all results below the acceptable R2 score (0.6 <= R2 < 1)
 df_modeling = df_modeling[(df_modeling["Best R2"] >= R2_TOLERANCE)]
 df_training = df_training[(df_training["Best R2"] >= R2_TOLERANCE)]
 df_prediction = df_prediction[(df_prediction["Best R2"] >= R2_TOLERANCE)]
 
-# 8. Remove "Country" column in training and prediction dataframes
-df_training.drop(columns="Country")
-df_prediction.drop(columns="Country")
-
-# 9. Organize data inside each dataframe and count total cases per regression in "Best Fit"
+# 7. Organize data inside each dataframe and count total cases per regression in "Best Fit"
 df_modeling = df_modeling.groupby("Component")["Best Fit"].value_counts().reset_index() 
-df_training = df_training.groupby("Component")["Best Fit"].value_counts().reset_index(name="count") 
-df_prediction = df_prediction.groupby("Component")["Best Fit"].value_counts().reset_index(name="count")
+df_training = df_training.groupby("Component")["Best Fit"].value_counts().reset_index() 
+df_prediction = df_prediction.groupby("Component")["Best Fit"].value_counts().reset_index()
 
-# 10. Pivot tables so regression labels are the columns and total count are the values in the cells (and replace NaNs with 0s)
+# 8. Pivot tables so regression labels are the columns and total count are the values in the cells (and replace NaNs with 0s)
 df_modeling = df_modeling.pivot(index="Component", columns="Best Fit", values="count").fillna(0)
 df_training = df_training.pivot(index="Component", columns="Best Fit", values="count").fillna(0)
 df_prediction = df_prediction.pivot(index="Component", columns="Best Fit", values="count").fillna(0)

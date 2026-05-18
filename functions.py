@@ -92,7 +92,7 @@ def regression_predict_tscv(pol_degree, nsplits, regression_type, df, component)
         pred_r2.append(r2_score(y_test, test_pred)) # Test prediction R2 score
 
     # Return a list with the regression name and the R2 scores for training and prediction
-    return [regression_label, np.mean(train_r2), np.mean(pred_r2)]
+    return [np.mean(train_r2), np.mean(pred_r2)]
 
 def regression_model(pol_degree, regression_type, df, component):
 
@@ -126,7 +126,7 @@ def regression_model(pol_degree, regression_type, df, component):
         regression_label = regression_type
 
     # Return a list with the error metrics for the regression
-    return [regression_label, r2_score(y, model), np.sqrt(mean_squared_error(y, model))]
+    return r2_score(y, model)
 
 def apply_regressions(regressions, degrees, df, component):
 
@@ -139,12 +139,12 @@ def apply_regressions(regressions, degrees, df, component):
         if(regression=="polynomial" or regression=="ridge"):
             for degree in degrees: # Evaluate the polynomial or ridge regressions for degrees 1-3
                 metrics = regression_model(degree, regression, df, component)
-                regression_metrics.extend(np.round(metrics[1:3],4))
+                regression_metrics.append(np.round(metrics,4))
 
         # Random Forest regression
         elif(regression=="random_forest"):
             metrics = regression_model(1, regression, df, component)
-            regression_metrics.extend(np.round(metrics[1:3],4))
+            regression_metrics.append(np.round(metrics,4))
 
     return regression_metrics
 
@@ -157,11 +157,11 @@ def apply_regressions_tscv(regressions, degrees, cv_slices, df, component):
         if(regression=="polynomial" or regression=="ridge"):
             for degree in degrees: # Evaluate the polynomial or ridge regressions for degrees 1-3
                 metrics = regression_predict_tscv(degree, cv_slices, regression, df, component)
-                regression_metrics.extend(np.round(metrics[1:5],4))
+                regression_metrics.extend(np.round(metrics,4))
 
         elif(regression=="random_forest"):
             metrics = regression_predict_tscv(degree, cv_slices, regression, df, component)
-            regression_metrics.extend(np.round(metrics[1:5],4))
+            regression_metrics.extend(np.round(metrics,4))
 
     return regression_metrics
 
