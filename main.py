@@ -171,9 +171,9 @@ print("- Finished summary of best fit per component:")
 # Plotting area
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-plot_regression_count(colors, df_modeling, "Number of best-fit cases per regression type for modeling the available greenhouse gas component data")
-plot_regression_count(colors, df_training, "Number of best-fit cases per regression type during training")
-plot_regression_count(colors, df_prediction, "Number of best-fit cases per regression type during prediction")
+plot_regression_count(colors, df_modeling, "Number of best-fit cases for historical data of greenhouse gas components with different regression types")
+plot_regression_count(colors, df_training, "Number of best-fit cases for greenhouse gas components with different regression types during training")
+plot_regression_count(colors, df_prediction, "Number of best-fit cases for greenhouse gas components with different regression types during prediction")
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Export results to .csv files
