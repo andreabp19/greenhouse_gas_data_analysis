@@ -27,13 +27,15 @@ RIDGE_ALPHA = 0.1
 # Data Modeling and Prediction Functions
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-# Applies polynomial and ridge regressions to input data using time series cross-validation
-# pol_degree = Degree of the regression (applies for polynomial and ridge). Random forest doesn't use it (use any value for that one)
-# X: x-axis data (time)
-# y: y-axis data (in this case, greenhouse gas component data)
-# nsplits: number of splits on the dataset for the cross validation
-# array with the regression types to be implemented (polynomial, ridge or random forest)
-# Note: Currently, only applies for polynomial and ridge regressions, could be expanded for others.
+# Brief: Applies a selected regression to data using time series cross-validation for training and prediction
+# Arguments:
+#   pol_degree:         Degree of the regression (applies for polynomial and ridge). Random Forest doesn't use it (choose any value).
+#   X:                  x-axis data (time)
+#   y:                  y-axis data (in this case, greenhouse gas component data)
+#   nsplits:            Number of splits on the dataset for the cross validation
+#   regression_type:    Array with the regression types to be implemented (currently supports: polynomial, ridge or random forest)
+#   component:          Variable to be modeled
+# Returns: R2 score of the regression
 def regression_predict_tscv(pol_degree, nsplits, regression_type, df, component):
 
     # Arrays for saving the error metric results
@@ -94,6 +96,14 @@ def regression_predict_tscv(pol_degree, nsplits, regression_type, df, component)
     # Return a list with the regression name and the R2 scores for training and prediction
     return [np.mean(train_r2), np.mean(pred_r2)]
 
+
+# Brief: Applies a selected regression to data to fit historical data and returns the R2 score.
+# Arguments:
+#   pol_degree:         Degree of the regression (applies for polynomial and ridge). Random Forest doesn't use it (choose any value).
+#   regression_type:    Array with the regression types to be implemented (currently supports: polynomial, ridge or random forest)
+#   df:                 Dataframe from which to extract and predict data.
+#   component:          Variable to be predicted
+# Returns: R2 score of the regression
 def regression_model(pol_degree, regression_type, df, component):
 
     # Retrieve X
@@ -128,6 +138,13 @@ def regression_model(pol_degree, regression_type, df, component):
     # Return a list with the error metrics for the regression
     return r2_score(y, model)
 
+# Brief: Applies a list of regressions to fit historical data and returns the R2 score of each by using regression_model().
+# Arguments:
+#   regressions:    List of regressions to apply (currently supports polynomial, ridge and random forest)
+#   degrees:        Degree of the regressions (applies for polynomial and ridge). Random Forest doesn't use it (choose any value).
+#   df:             Dataframe from which to extract and model data
+#   component:      Variable to be modeled
+# Returns: A list with the R2 scores of the regressions
 def apply_regressions(regressions, degrees, df, component):
 
     regression_metrics = []
@@ -148,6 +165,14 @@ def apply_regressions(regressions, degrees, df, component):
 
     return regression_metrics
 
+# Brief: Applies a list of regressions to predict data and returns the R2 score of each by using regression_predict_tscv().
+# Arguments:
+#   regressions:    List of regressions to apply (currently supports polynomial, ridge and random forest)
+#   degrees:        Degree of the regressions (applies for polynomial and ridge). Random Forest doesn't use it (choose any value).
+#   cs_slices:      Number of slices or divisions to implement on the input dataframe for cross-validation
+#   df:             Dataframe from which to extract and model data
+#   component:      Variable to be modeled
+# Returns: A list with the R2 scores of the regressions
 def apply_regressions_tscv(regressions, degrees, cv_slices, df, component):
 
     regression_metrics = []
@@ -169,13 +194,21 @@ def apply_regressions_tscv(regressions, degrees, cv_slices, df, component):
 # Data Postprocessing Functions
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-def df_from_raw(raw_results):
-    new_df = pd.DataFrame(raw_results) # Generate DataFrame with the results table [[...], [...], ...]
+# Brief: Takes an input table formatted as a list of lists [[...], [...], ...] and generates a draframe.
+# Arguments:
+#   raw_table:  List of lists containing the table to be converted to a dataframe
+# Returns: The resulting dataframe after converting the table    
+def df_from_raw(raw_table):
+    new_df = pd.DataFrame(raw_table) # Generate DataFrame from the table [[...], [...], ...]
     new_df.columns = new_df.iloc[0] # Set the row with labels as column names
     new_df = new_df[1:].reset_index(drop=True) # Remove the row that has the number-filled column labels
     
     return new_df
 
+# Brief: Takes an input dataframe and determines the best regression to fit each row of data
+# Arguments:
+#   df:     Input dataframe
+# Returns: The input dataframe with additional columns for the name and R2 score of the best regression fit     
 def get_best_regression_fit(df):
     df["Best Fit"] = df.iloc[:, 2:].idxmax(axis=1) # Label of the best regression fit
     df["Best R2"] = df.iloc[:, 2:-1].max(axis=1) # R2 score of the best regression (returns a Series)
@@ -184,25 +217,15 @@ def get_best_regression_fit(df):
     return df
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-# Print functions
-# ----------------------------------------------------------------------------------------------------------------------------------
-
-def print_tscv_results(text, results):
-    print("\n--------------------------------------------------")
-    print(text + " Error Metrics:")
-    print("--------------------------------------------------")
-    print("Regression: " + results["regression"])
-    print("R2 mean: " + str(results["r2_mean"].round(3)))
-    print("R2 std.dev: " + str(results["r2_std"].round(3)))
-    print("RMSE mean: " + str(results["rmse_mean"].round(3)))
-    print("RMSE std.dev: " + str(results["rmse_std"].round(3)))
-    print("MAE mean: " + str(results["mae_mean"].round(3)))
-    print("MAE std.dev: " + str(results["mae_std"].round(3)))
-
-# ----------------------------------------------------------------------------------------------------------------------------------
 # Plot functions
 # ----------------------------------------------------------------------------------------------------------------------------------
 
+# Brief: Plots a stacked bar chart based on a given dataframe
+# Arguments:
+#   colors: List of colors to be used (in hexadecimal)
+#   df:     Input dataframe to plot
+#   title:  String with the desired title for the plot
+# Returns: None.
 def plot_regression_count(colors, df, title):
     
     ax = df.plot(kind='bar', stacked=True, figsize=(12,8), color=colors)
